@@ -1,3 +1,4 @@
+
 # tests/testthat/test-aperture-4.R
 # Tests for aperture 4 (ISEA4H) hexagonal grid quantization
 #
@@ -17,6 +18,7 @@ setup_icosa <- function() {
 # =============================================================================
 
 test_that("aperture 4 round-trip works", {
+  skip_on_cran()
   setup_icosa()
 
   test_points <- list(
@@ -67,6 +69,7 @@ test_that("aperture 4 batch round-trip succeeds", {
 # =============================================================================
 
 test_that("aperture 4 always uses Class I (no rotation)", {
+  skip_on_cran()
   setup_icosa()
 
   for (res in c(0, 1, 2, 3, 4)) {
@@ -95,6 +98,7 @@ test_that("aperture 4 always uses Class I (no rotation)", {
 # =============================================================================
 
 test_that("aperture 4 refines by factor of 4", {
+  skip_on_cran()
   setup_icosa()
 
   # Scale should double each resolution (2^res), area quarters
@@ -110,6 +114,7 @@ test_that("aperture 4 refines by factor of 4", {
 })
 
 test_that("aperture 4 cell area ratios are correct", {
+  skip_on_cran()
   setup_icosa()
 
   # Adjacent resolutions should have area ratio of 4:1
@@ -132,6 +137,7 @@ test_that("aperture 4 cell area ratios are correct", {
 # =============================================================================
 
 test_that("aperture 4 corners form valid hexagons", {
+  skip_on_cran()
   setup_icosa()
 
   for (res in c(0, 1, 2, 3)) {
@@ -149,6 +155,7 @@ test_that("aperture 4 corners form valid hexagons", {
 # =============================================================================
 
 test_that("aperture 4 lon/lat workflow works", {
+  skip_on_cran()
   setup_icosa()
 
   lon <- 16.37  # Vienna
@@ -173,6 +180,7 @@ test_that("aperture 4 lon/lat workflow works", {
 # =============================================================================
 
 test_that("cpp_test_roundtrip_ap4 returns TRUE for valid points", {
+  skip_on_cran()
   setup_icosa()
 
   test_points <- list(

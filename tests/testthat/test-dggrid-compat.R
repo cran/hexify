@@ -1,3 +1,4 @@
+
 # tests/testthat/test-dggrid-compat.R
 # Tests verifying hexify produces identical output to dggridR
 #
@@ -104,6 +105,7 @@ test_that("hexify matches dggridR for aperture 3, resolution 7", {
 # =============================================================================
 
 test_that("hexify batch cell_id matches dggridR for aperture 3, resolution 3", {
+  skip_on_cran()
   setup_icosa()
 
   ref <- load_validation_data(3, 3)
@@ -129,6 +131,7 @@ test_that("hexify batch cell_id matches dggridR for aperture 3, resolution 3", {
 })
 
 test_that("hexify batch cell_id matches dggridR for aperture 3, resolution 5", {
+  skip_on_cran()
   setup_icosa()
 
   ref <- load_validation_data(3, 5)
@@ -152,6 +155,7 @@ test_that("hexify batch cell_id matches dggridR for aperture 3, resolution 5", {
 })
 
 test_that("hexify batch cell_id matches dggridR for aperture 3, resolution 7", {
+  skip_on_cran()
   setup_icosa()
 
   ref <- load_validation_data(3, 7)

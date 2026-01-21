@@ -1,3 +1,4 @@
+
 # tests/testthat/test-polygons.R
 # Tests for polygon generation functions
 #
@@ -155,6 +156,7 @@ test_that("cell_to_sf works with HexData object (extracts unique cells)", {
 # =============================================================================
 
 test_that("hexify_grid_rect generates grid for rectangular region", {
+  skip_on_cran()  # Generates many polygons
   skip_if_not_installed("sf")
 
   grid <- hexify_grid_rect(
@@ -328,6 +330,7 @@ test_that("hexify_grid_rect works with resround", {
 # =============================================================================
 
 test_that("hexify_grid_global works with large area", {
+  skip_on_cran()  # Generates many cells
   skip_if_not_installed("sf")
 
   # Use very large area to avoid warning
@@ -338,6 +341,7 @@ test_that("hexify_grid_global works with large area", {
 })
 
 test_that("hexify_grid_global warns on small area", {
+  skip_on_cran()  # Slow computation
   skip_if_not_installed("sf")
 
   expect_warning(

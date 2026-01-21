@@ -1,3 +1,4 @@
+
 # tests/testthat/test-hexify-heatmap.R
 # Tests for hexify_heatmap function
 
@@ -34,6 +35,7 @@ test_that("hexify_heatmap works with value column", {
 })
 
 test_that("hexify_heatmap works with basemap = 'world'", {
+  skip_on_cran()  # Slow sf intersection operations
   skip_if_not_installed("sf")
   skip_if_not_installed("ggplot2")
 
@@ -49,6 +51,7 @@ test_that("hexify_heatmap works with basemap = 'world'", {
 })
 
 test_that("hexify_heatmap works with custom sf basemap", {
+  skip_on_cran()  # Slow sf operations
   skip_if_not_installed("sf")
   skip_if_not_installed("ggplot2")
 
@@ -179,6 +182,7 @@ test_that("hexify_heatmap works with legend_title", {
 })
 
 test_that("hexify_heatmap works with mask_outside", {
+  skip_on_cran()  # Slow sf intersection operations
   skip_if_not_installed("sf")
   skip_if_not_installed("ggplot2")
 
@@ -243,6 +247,7 @@ test_that("hexify_heatmap works with custom styling", {
 })
 
 test_that("hexify_heatmap works with CRS transformation", {
+  skip_on_cran()  # Slow CRS transformation
   skip_if_not_installed("sf")
   skip_if_not_installed("ggplot2")
 

@@ -1,3 +1,4 @@
+
 # tests/testthat/test-plot-methods.R
 # Tests for plot methods
 
@@ -19,6 +20,7 @@ test_that("plot.HexData works with default settings", {
 })
 
 test_that("plot.HexData works with basemap", {
+  skip_on_cran()  # Slow sf operations
   skip_if_not_installed("sf")
 
   df <- data.frame(
@@ -36,6 +38,7 @@ test_that("plot.HexData works with basemap", {
 })
 
 test_that("plot.HexData works with custom sf basemap", {
+  skip_on_cran()  # Slow sf operations
   skip_if_not_installed("sf")
 
   df <- data.frame(

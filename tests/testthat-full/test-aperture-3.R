@@ -1,4 +1,3 @@
-
 # tests/testthat/test-aperture-3.R
 # Tests for aperture 3 (ISEA3H) hexagonal grid quantization
 #
