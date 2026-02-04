@@ -30,17 +30,13 @@ The most powerful pattern in hexify is defining a grid once and reusing it acros
 You often have:
 
 - Several independent datasets (observations, sensors, surveys)
-
 - All in longitude/latitude coordinates
-
 - Collected at different times or from different sources
 
 You want to:
 
 - Put everything on one common global grid
-
 - Be sure the grids actually match
-
 - Combine results later without subtle errors
 
 ### The Solution: Shared Grid Objects
@@ -167,10 +163,7 @@ grid <- hex_grid(area_km2 = 2000)
 france_grid <- grid_rect(c(-5, 41, 10, 52), grid)
 
 # Clip grid to France boundary
-# Use planar geometry to avoid s2 edge cases
-sf_use_s2(FALSE)
 france_grid_clipped <- st_intersection(france_grid, st_geometry(france))
-sf_use_s2(TRUE)
 
 ggplot() +
   geom_sf(data = france, fill = "gray95", color = "gray40", linewidth = 0.5) +
@@ -462,7 +455,5 @@ wrapped <- st_wrap_dateline(
 ## See Also
 
 - `vignette("quickstart")` - Getting started with hexify
-
 - `vignette("visualization")` - Plotting with `plot()`, `hexify_heatmap()`
-
 - `vignette("theory")` - Mathematical foundations (ISEA projection, apertures)
