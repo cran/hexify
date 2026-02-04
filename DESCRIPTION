@@ -1,6 +1,6 @@
 Package: hexify
 Title: Equal-Area Hex Grids on the 'Snyder' 'ISEA' 'Icosahedron'
-Version: 0.3.8
+Version: 0.3.9
 Authors@R: 
     person("Gilles", "Colling", , "gilles.colling051@gmail.com", role = c("aut", "cre", "cph"),
            comment = c(ORCID = "0000-0003-3070-6066"))
@@ -26,9 +26,9 @@ Config/testthat/edition: 3
 Depends: R (>= 3.5)
 LazyData: true
 NeedsCompilation: yes
-Packaged: 2026-01-21 16:56:36 UTC; Gilles Colling
+Packaged: 2026-02-04 16:42:22 UTC; Gilles Colling
 Author: Gilles Colling [aut, cre, cph] (ORCID:
     <https://orcid.org/0000-0003-3070-6066>)
 Maintainer: Gilles Colling <gilles.colling051@gmail.com>
 Repository: CRAN
-Date/Publication: 2026-01-21 23:00:15 UTC
+Date/Publication: 2026-02-04 17:00:02 UTC
