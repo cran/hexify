@@ -30,13 +30,17 @@ The most powerful pattern in hexify is defining a grid once and reusing it acros
 You often have:
 
 - Several independent datasets (observations, sensors, surveys)
+
 - All in longitude/latitude coordinates
+
 - Collected at different times or from different sources
 
 You want to:
 
 - Put everything on one common global grid
+
 - Be sure the grids actually match
+
 - Combine results later without subtle errors
 
 ### The Solution: Shared Grid Objects
@@ -424,16 +428,9 @@ Coordinates with latitude > 89° may have projection artifacts. The grid remains
 
 ### Date Line
 
-The date line (lon = ±180°) is handled correctly. Use `st_wrap_dateline()` when visualizing polygons that cross it:
-
-```{r dateline, eval=FALSE}
-# For polygons crossing the date line
-wrapped <- st_wrap_dateline(
-  polygons,
-  options = c("WRAPDATELINE=YES", "DATELINEOFFSET=180"),
-  quiet = TRUE
-)
-```
+Polygons crossing the date line (lon = ±180°) are handled automatically.
+`cell_to_sf()` applies `sf::st_wrap_dateline()` internally, so flat map
+projections render correctly without manual intervention.
 
 ## Function Summary
 
@@ -455,5 +452,7 @@ wrapped <- st_wrap_dateline(
 ## See Also
 
 - `vignette("quickstart")` - Getting started with hexify
+
 - `vignette("visualization")` - Plotting with `plot()`, `hexify_heatmap()`
+
 - `vignette("theory")` - Mathematical foundations (ISEA projection, apertures)

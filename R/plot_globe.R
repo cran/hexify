@@ -99,12 +99,12 @@ globe_centers <- list(
 #'
 #' @export
 #' @examples
-#' # Get data for custom plotting (fast, no rendering)
+#' \donttest{
+#' # Get data for custom plotting (no rendering)
 #' data <- plot_globe(area = 100000, center = "europe", return_data = TRUE)
 #' nrow(data$hexagons)
 #' class(data$ocean_circle)
 #'
-#' \donttest{
 #' # Basic usage - Europe-centered globe
 #' plot_globe(area = 80000, center = "europe")
 #' }
@@ -231,9 +231,16 @@ prepare_globe_data <- function(
     center["lat"], center["lon"]
   )
 
-  # Generate global grid
+  # Disable S2 early - some polar geometries are invalid in spherical mode
+  s2_state <- sf::sf_use_s2()
+  sf::sf_use_s2(FALSE)
+  on.exit(sf::sf_use_s2(s2_state), add = TRUE)
+
+  # Generate global grid — skip dateline wrapping because orthographic
+  # projection handles antimeridian cells natively; wrapping splits them
+  # into MULTIPOLYGON halves that create visible gaps on the globe
   grid <- hex_grid(area_km2 = area, aperture = aperture)
-  global_hex <- grid_global(grid)
+  global_hex <- grid_global(grid, wrap_dateline = FALSE)
 
   # Pre-filter hexagons by angular distance (optimization)
   # Keep cells within ~95 degrees of center (visible hemisphere + margin)
@@ -242,7 +249,7 @@ prepare_globe_data <- function(
 
   # Angular distance calculation (spherical)
   lon1 <- center["lon"] * pi / 180
- lat1 <- center["lat"] * pi / 180
+  lat1 <- center["lat"] * pi / 180
   lon2 <- coords[, 1] * pi / 180
   lat2 <- coords[, 2] * pi / 180
 
@@ -256,11 +263,6 @@ prepare_globe_data <- function(
   visible_idx <- angular_dist < 95
   global_hex <- global_hex[visible_idx, ]
 
-  # Disable S2 for transformations
-  s2_state <- sf::sf_use_s2()
-  sf::sf_use_s2(FALSE)
-  on.exit(sf::sf_use_s2(s2_state), add = TRUE)
-
   # Transform hexagons to orthographic - handle failures gracefully
   hex_ortho <- tryCatch({
     suppressWarnings(sf::st_transform(global_hex, crs_string))
@@ -272,19 +274,46 @@ prepare_globe_data <- function(
   # Remove empty geometries
   hex_ortho <- hex_ortho[!sf::st_is_empty(hex_ortho), ]
 
-  # Fix invalid geometries using st_buffer(0) - more robust than st_make_valid
-  invalid_mask <- !sf::st_is_valid(hex_ortho)
-  if (any(invalid_mask)) {
-    hex_ortho <- tryCatch({
-      sf::st_buffer(hex_ortho, 0)
-    }, error = function(e) {
-      # If buffer fails, filter to only valid geometries
-      hex_ortho[!invalid_mask, ]
-    })
-  }
+  # Fix invalid geometries using st_make_valid
+  # MULTIPOLYGON cells (from dateline crossing) often become invalid after
+  # orthographic transform due to self-intersecting parts - st_make_valid fixes this
+  # Some cells may become degenerate (2-point rings) and fail st_make_valid
+  hex_ortho <- tryCatch({
+    sf::st_make_valid(hex_ortho)
+  }, error = function(e) {
+    # Batch st_make_valid failed - process cells individually
+    # Mark cells for removal if they can't be fixed
+    keep_mask <- rep(TRUE, nrow(hex_ortho))
 
-  # Remove any remaining empty/degenerate geometries
+    for (i in seq_len(nrow(hex_ortho))) {
+      fixed <- tryCatch({
+        sf::st_make_valid(hex_ortho[i, ])
+      }, error = function(e2) {
+        # Try buffer as fallback
+        tryCatch({
+          sf::st_buffer(hex_ortho[i, ], 0)
+        }, error = function(e3) {
+          NULL  # Mark for removal
+        })
+      })
+
+      if (is.null(fixed) || sf::st_is_empty(fixed)) {
+        keep_mask[i] <- FALSE
+      } else {
+        hex_ortho[i, ] <- fixed
+      }
+    }
+
+    hex_ortho[keep_mask, ]
+  })
+
+  # Remove empty and degenerate geometries
+  # Cells at hemisphere edge get "squashed" to tiny areas - filter them out
   hex_ortho <- hex_ortho[!sf::st_is_empty(hex_ortho), ]
+  areas <- tryCatch(as.numeric(sf::st_area(hex_ortho)), error = function(e) rep(NA, nrow(hex_ortho)))
+  # Expected cell area is roughly area * 1e6 m² - filter cells < 1% of expected
+  min_area <- area * 1e6 * 0.01  # 1% of expected area
+  hex_ortho <- hex_ortho[!is.na(areas) & areas > min_area, ]
 
   # Create ocean circle (globe boundary)
   earth_radius <- 6371000  # meters
@@ -325,6 +354,10 @@ prepare_globe_data <- function(
 
     # Clip hexagons to land if requested
     if (clip_to_land && !is.null(land_ortho)) {
+      # Filter out any malformed geometries (NA validity) before intersection
+      validity <- sf::st_is_valid(hex_ortho)
+      hex_ortho <- hex_ortho[!is.na(validity) & validity, ]
+
       hex_ortho <- tryCatch({
         result <- suppressWarnings(sf::st_intersection(hex_ortho, land_ortho))
         geom_types <- sf::st_geometry_type(result)
@@ -412,31 +445,48 @@ prepare_land_data <- function(land_data, exclude_antarctica, crs_string, ocean_c
     }
   }
 
-  # Union all land polygons
-  land_union <- tryCatch({
-    land_geom <- suppressWarnings(sf::st_union(sf::st_geometry(land_data)))
-    suppressWarnings(sf::st_buffer(land_geom, 0))  # More robust than st_make_valid
-  }, error = function(e) {
-    sf::st_geometry(land_data)
-  })
-
-  # Transform to orthographic
+  # Transform individual countries to orthographic FIRST, then union
+  # (Union in lat/lon then transform creates empty geometries for global polygons)
   land_ortho <- tryCatch({
-    suppressWarnings(sf::st_transform(land_union, crs_string))
+    transformed <- suppressWarnings(sf::st_transform(land_data, crs_string))
+    transformed <- transformed[!sf::st_is_empty(transformed), ]
+
+    if (nrow(transformed) == 0) return(NULL)
+
+    # Union in orthographic space - use st_combine + st_union for robustness
+    land_geom <- tryCatch({
+      combined <- sf::st_combine(sf::st_geometry(transformed))
+      suppressWarnings(sf::st_union(combined))
+    }, error = function(e) {
+      # If union fails, just return combined geometries
+      sf::st_combine(sf::st_geometry(transformed))
+    })
+
+    suppressWarnings(sf::st_buffer(land_geom, 0))
   }, error = function(e) NULL)
 
-  if (is.null(land_ortho)) return(NULL)
+  if (is.null(land_ortho) || length(land_ortho) == 0) return(NULL)
 
-  # Remove empty geometries after transform
+  # Remove empty geometries
   land_ortho <- land_ortho[!sf::st_is_empty(land_ortho)]
-
   if (length(land_ortho) == 0) return(NULL)
 
   # Clip to globe circle
   land_ortho <- tryCatch({
     result <- suppressWarnings(sf::st_intersection(land_ortho, ocean_circle))
-    sf::st_buffer(result, 0)  # More robust than st_make_valid
+    sf::st_buffer(result, 0)
   }, error = function(e) land_ortho)
+
+  # Fix any degenerate geometries (e.g., rings with < 3 points)
+  # Use a tiny buffer (1 meter) to clean up degenerate rings, then unbuffer
+  land_ortho <- tryCatch({
+    buffered <- sf::st_buffer(land_ortho, 1)  # 1 meter buffer
+    unbuffered <- sf::st_buffer(buffered, -1)  # Remove the buffer
+    sf::st_make_valid(unbuffered)
+  }, error = function(e) {
+    # Fallback: just try st_make_valid
+    tryCatch(sf::st_make_valid(land_ortho), error = function(e2) land_ortho)
+  })
 
   land_ortho
 }

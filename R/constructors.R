@@ -16,9 +16,18 @@
 #'
 #' @param area_km2 Target cell area in square kilometers. Mutually exclusive
 #'   with \code{resolution}.
-#' @param resolution Grid resolution level (0-30). Mutually exclusive with
-#'   \code{area_km2}.
+#' @param resolution Grid resolution level (0-30 for ISEA, 0-15 for H3).
+#'   Mutually exclusive with \code{area_km2}. For H3, typical use cases by
+#'   resolution:
+#'   \itemize{
+#'     \item 0-3: continental/country scale
+#'     \item 4-7: regional/city scale
+#'     \item 8-10: neighborhood/block scale (FCC uses 8-9)
+#'     \item 11-15: building/sub-meter scale
+#'   }
 #' @param aperture Grid aperture: 3 (default), 4, 7, or "4/3" for mixed.
+#'   Ignored for H3 grids (fixed at 7).
+#' @param type Grid type: "isea" (default) or "h3".
 #' @param resround Resolution rounding when using \code{area_km2}:
 #'   "nearest" (default), "up", or "down".
 #' @param crs Coordinate reference system EPSG code (default 4326 = 'WGS84').
@@ -29,7 +38,12 @@
 #' Exactly one of \code{area_km2} or \code{resolution} must be provided.
 #'
 #' When \code{area_km2} is provided, the resolution is calculated automatically
-#' using the cell count formula: N = 10 * aperture^res + 2.
+#' using the cell count formula: N = 10 * aperture^res + 2 (ISEA) or by
+#' matching the closest H3 resolution.
+#'
+#' H3 grids use the Uber H3 hierarchical hexagonal system. Unlike ISEA grids,
+#' H3 cells are NOT exactly equal-area (area varies by ~3-5\% depending on
+#' location).
 #'
 #' @seealso \code{\link{hexify}} for assigning points to cells,
 #'   \code{\link{HexGridInfo-class}} for class documentation
@@ -88,8 +102,67 @@
 hex_grid <- function(area_km2 = NULL,
                      resolution = NULL,
                      aperture = 3,
+                     type = c("isea", "h3"),
                      resround = "nearest",
                      crs = 4326L) {
+
+  type <- match.arg(type)
+
+  # =========================================================================
+  # H3 grid path
+  # =========================================================================
+  if (type == "h3") {
+    if (!missing(aperture) && aperture != 3) {
+      warning("aperture is ignored for H3 grids (H3 uses fixed aperture 7)")
+    }
+
+    # Validate: exactly one of area_km2 or resolution
+    if (is.null(area_km2) && is.null(resolution)) {
+      stop("Exactly one of 'area_km2' or 'resolution' must be provided")
+    }
+    if (!is.null(area_km2) && !is.null(resolution)) {
+      stop("Provide either 'area_km2' or 'resolution', not both")
+    }
+
+    if (!is.null(area_km2)) {
+      if (!is.numeric(area_km2) || area_km2 <= 0) {
+        stop("area_km2 must be a positive number")
+      }
+      # Find closest H3 resolution by area
+      resolution <- closest_h3_resolution(area_km2)
+      warning(sprintf(
+        "H3 cells are not exactly equal-area. Closest resolution %d has average area ~%.3f km^2 (requested %.3f km^2)",
+        resolution, H3_AVG_AREA_KM2[resolution + 1L], area_km2
+      ))
+    } else {
+      resolution <- as.integer(resolution)
+      if (resolution < H3_MIN_RESOLUTION || resolution > H3_MAX_RESOLUTION) {
+        stop(sprintf("H3 resolution must be between %d and %d",
+                     H3_MIN_RESOLUTION, H3_MAX_RESOLUTION))
+      }
+      rlang::inform(
+        "H3 cells are not exactly equal-area; area varies ~3-5% by latitude.",
+        .frequency = "once",
+        .frequency_id = "hexify_h3_not_equal_area"
+      )
+    }
+
+    actual_area <- H3_AVG_AREA_KM2[resolution + 1L]
+    actual_diagonal <- sqrt(actual_area * 2 / sqrt(3))
+
+    grid <- new("HexGridInfo",
+                aperture = "7",
+                resolution = as.integer(resolution),
+                area_km2 = as.numeric(actual_area),
+                diagonal_km = as.numeric(actual_diagonal),
+                crs = as.integer(crs),
+                grid_type = "h3")
+    return(grid)
+  }
+
+  # =========================================================================
+  # ISEA grid path (original logic)
+  # =========================================================================
 
   # -------------------------------------------------------------------------
   # Parse aperture (handle "4/3" mixed aperture)
@@ -171,7 +244,8 @@ hex_grid <- function(area_km2 = NULL,
               resolution = as.integer(resolution),
               area_km2 = as.numeric(actual_area),
               diagonal_km = as.numeric(actual_diagonal),
-              crs = as.integer(crs))
+              crs = as.integer(crs),
+              grid_type = "isea")
 
   # Validation happens automatically via setValidity
   grid
@@ -215,10 +289,17 @@ new_hex_data <- function(data,
     colnames(cell_center) <- c("lon", "lat")
   }
 
+  # For ISEA grids, coerce to numeric; for H3, keep as character
+  if (is_h3_grid(grid)) {
+    cell_id <- as.character(cell_id)
+  } else {
+    cell_id <- as.numeric(cell_id)
+  }
+
   new("HexData",
       data = data,
       grid = grid,
-      cell_id = as.numeric(cell_id),
+      cell_id = cell_id,
       cell_center = cell_center)
 }
 
@@ -317,13 +398,7 @@ as_sf.HexData <- function(x, geometry = c("point", "polygon"), ...) {
     # Polygon geometry from cell boundaries
     unique_ids <- unique(x@cell_id)
 
-    # Generate polygons
-    polys_sf <- hexify_cell_to_sf(
-      cell_id = unique_ids,
-      resolution = grid@resolution,
-      aperture = grid@aperture,
-      return_sf = TRUE
-    )
+    polys_sf <- cell_to_sf(unique_ids, grid)
 
     # Add cell_id to data for merge
     data_with_id <- cbind(data, cell_id = x@cell_id)

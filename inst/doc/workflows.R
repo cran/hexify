@@ -312,11 +312,3 @@ result <- hexify(data_with_na, lon = "lon", lat = "lat", grid = grid)
 cat("Cell IDs:", result@cell_id, "\n")
 cat("NA indicates invalid coordinates\n")
 
-## ----dateline, eval=FALSE-----------------------------------------------------
-# # For polygons crossing the date line
-# wrapped <- st_wrap_dateline(
-#   polygons,
-#   options = c("WRAPDATELINE=YES", "DATELINEOFFSET=180"),
-#   quiet = TRUE
-# )
-

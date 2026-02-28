@@ -12,7 +12,7 @@
 
 <meta name="author" content="Gilles Colling" />
 
-<meta name="date" content="2026-02-04" />
+<meta name="date" content="2026-02-28" />
 
 <title>Quick Start</title>
 
@@ -341,7 +341,7 @@ code > span.er { color: #a61717; background-color: #e3d2d2; }
 
 <h1 class="title toc-ignore">Quick Start</h1>
 <h4 class="author">Gilles Colling</h4>
-<h4 class="date">2026-02-04</h4>
+<h4 class="date">2026-02-28</h4>
 
 
 
@@ -588,12 +588,12 @@ assigning to grid cells, aggregating, and visualizing.</p>
 <p>hexify uses two S4 classes to make spatial workflows clean and
 error-free:</p>
 <ul>
-<li><strong><code>HexGridInfo</code></strong>: A grid specification that
-stores all parameters (aperture, resolution, area). Define once, reuse
-everywhere.</li>
-<li><strong><code>HexData</code></strong>: Your data + the grid that was
-used. Carries the grid reference so downstream operations “just
-work.”</li>
+<li><p><strong><code>HexGridInfo</code></strong>: A grid specification
+that stores all parameters (aperture, resolution, area). Define once,
+reuse everywhere.</p></li>
+<li><p><strong><code>HexData</code></strong>: Your data + the grid that
+was used. Carries the grid reference so downstream operations “just
+work.”</p></li>
 </ul>
 <div id="hexgridinfo-slots" class="section level3">
 <h3>HexGridInfo Slots</h3>
@@ -678,11 +678,11 @@ cells</strong> with area 5/6 that of hexagons. These are located at the
 icosahedron vertices (poles + 10 evenly-spaced low-latitude points).</p>
 <p>For most analyses, pentagons are not a concern:</p>
 <ol style="list-style-type: decimal">
-<li>They’re a tiny minority (12 out of millions of cells at high
-resolutions)</li>
-<li>They’re in predictable locations</li>
-<li>The area difference (5/6) is small and can be corrected if
-needed</li>
+<li><p>They’re a tiny minority (12 out of millions of cells at high
+resolutions)</p></li>
+<li><p>They’re in predictable locations</p></li>
+<li><p>The area difference (5/6) is small and can be corrected if
+needed</p></li>
 </ol>
 </div>
 <div id="multi-scale-analysis" class="section level3">
@@ -702,12 +702,12 @@ numeric types for very high resolutions.</p>
 <div id="see-also" class="section level2">
 <h2>See Also</h2>
 <ul>
-<li><code>vignette(&quot;visualization&quot;)</code> - Plotting options:
-<code>plot()</code>, <code>hexify_heatmap()</code></li>
-<li><code>vignette(&quot;workflows&quot;)</code> - Grid generation,
-multi-resolution analysis, spatial joins, choosing resolution</li>
-<li><code>vignette(&quot;theory&quot;)</code> - Mathematical foundations (ISEA
-projection, apertures, space-filling curves)</li>
+<li><p><code>vignette(&quot;visualization&quot;)</code> - Plotting options:
+<code>plot()</code>, <code>hexify_heatmap()</code></p></li>
+<li><p><code>vignette(&quot;workflows&quot;)</code> - Grid generation,
+multi-resolution analysis, spatial joins, choosing resolution</p></li>
+<li><p><code>vignette(&quot;theory&quot;)</code> - Mathematical foundations (ISEA
+projection, apertures, space-filling curves)</p></li>
 </ul>
 </div>
 </div>
