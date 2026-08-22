@@ -11,25 +11,21 @@ NULL
 
 #' Calculate resolution for target area
 #'
-#' Uses the 'ISEA3H' cell count formula: N = 10 * aperture^res + 2
-#' This matches 'dggridR' resolution numbering exactly.
+#' Uses the 'ISEA3H'/'ISEA4H'/'ISEA7H' cell count formula
+#' N = 10 * aperture^res + 2, which matches 'dggridR' resolution numbering
+#' exactly.
 #'
 #' @param target_area_km2 Target area in square kilometers
 #' @param aperture Aperture (3, 4, or 7)
+#' @param radius_km Radius of the body, in kilometers
 #' @return Resolution level
 #' @keywords internal
-calculate_resolution_for_area <- function(target_area_km2, aperture = 3) {
-  # ISEA3H cell count formula (matches dggridR exactly):
-  # N = 10 * aperture^res + 2
-  #
-  # Solving for res given target area:
-  # area = EARTH_SURFACE / N
-  # N = EARTH_SURFACE / area
-  # 10 * aperture^res + 2 = EARTH_SURFACE / area
-  # aperture^res = (EARTH_SURFACE / area - 2) / 10
-  # res = log((EARTH_SURFACE / area - 2) / 10) / log(aperture)
+calculate_resolution_for_area <- function(target_area_km2, aperture = 3,
+                                          radius_km = EARTH_RADIUS_KM) {
+  n_cells <- body_surface_km2(radius_km) / target_area_km2
 
-  n_cells <- EARTH_SURFACE_KM2 / target_area_km2
+  # Solving N = 10 * aperture^res + 2 for res given target area:
+  # res = log((surface / area - 2) / 10) / log(aperture)
   resolution <- log((n_cells - 2) / 10) / log(aperture)
 
   return(resolution)  # Return unrounded for caller to handle rounding mode
@@ -46,6 +42,8 @@ calculate_resolution_for_area <- function(target_area_km2, aperture = 3) {
 #' @param resround How to round resolution ("nearest", "up", "down")
 #' @param aperture Aperture sequence (3, 4, or 7)
 #' @param projection Projection type (only 'ISEA' supported currently)
+#' @param radius_km Radius of the body the grid covers, in kilometers, or a body
+#'   name such as "mars" (default Earth). See \code{\link{hex_grid}}.
 #'
 #' @return A hexify_grid object containing:
 #'   \item{area}{Target cell area}
@@ -53,6 +51,7 @@ calculate_resolution_for_area <- function(target_area_km2, aperture = 3) {
 #'   \item{aperture}{Grid aperture (3, 4, or 7)}
 #'   \item{topology}{Grid topology ("HEXAGON")}
 #'   \item{projection}{Map projection ("ISEA")}
+#'   \item{radius_km}{Radius of the body, in kilometers}
 #'   \item{index_type}{Index encoding type ("z3", "z7", or "zorder")}
 #'
 #' @family hexify main
@@ -71,25 +70,32 @@ hexify_grid <- function(area,
                              metric = TRUE,
                              resround = "nearest",
                              aperture = 3,
-                             projection = "ISEA") {
-  
+                             projection = "ISEA",
+                             radius_km = EARTH_RADIUS_KM) {
+
   # Input validation
   if (topology != "HEXAGON") {
     stop("Only HEXAGON topology is supported")
   }
-  
+
   if (projection != "ISEA") {
     stop("Only ISEA projection is supported")
   }
-  
+
   validate_aperture(aperture)
-  
+
+  radius_km <- resolve_radius_km(radius_km)
+
   if (!resround %in% c("nearest", "up", "down")) {
     stop("resround must be 'nearest', 'up', or 'down'")
   }
-  
+
+  if (!is.numeric(area) || length(area) != 1 || is.na(area) || area <= 0) {
+    stop("area must be a positive number")
+  }
+
   # Calculate resolution for target area
-  resolution <- calculate_resolution_for_area(area, aperture)
+  resolution <- calculate_resolution_for_area(area, aperture, radius_km)
   
   # Apply rounding
   if (resround == "up") {
@@ -124,8 +130,9 @@ hexify_grid <- function(area,
     topology = topology,
     projection = projection,
     metric = metric,
+    radius_km = radius_km,
     index_type = index_type,
-    
+
     # dggridR-compatible fields (for backwards compatibility)
     res = resolution,
     topology_family = topology,
@@ -151,7 +158,7 @@ hexify_grid <- function(area,
 #' This function is called internally by most hexify functions to ensure
 #' grid integrity.
 #'
-#' @param dggs Grid object to verify (from hexify_grid)
+#' @param dggs Grid object to verify (from hexify_grid() or hex_grid())
 #' @return TRUE (invisibly) if valid, otherwise throws an error
 #'
 #' @export
@@ -159,15 +166,28 @@ hexify_grid <- function(area,
 #' grid <- hexify_grid(area = 1000, aperture = 3)
 #' dgverify(grid)  # Should pass silently
 #'
+#' # Modern HexGridInfo objects are accepted too
+#' dgverify(hex_grid(area_km2 = 1000))
+#'
 #' # Invalid grid will throw error
 #' bad_grid <- list(aperture = 5)
 #' try(dgverify(bad_grid))  # Will error
 dgverify <- function(dggs) {
+  # Accept the modern HexGridInfo (S4) object by converting to the legacy
+  # list representation this function checks.
+  if (is_hex_grid(dggs)) {
+    if (dggs@grid_type == "h3") {
+      validate_resolution(dggs@resolution)
+      return(invisible(TRUE))
+    }
+    dggs <- HexGridInfo_to_hexify_grid(dggs)
+  }
+
   # Check object type
   if (!inherits(dggs, "hexify_grid") && !inherits(dggs, "dggs")) {
-    stop("dggs must be a grid object from hexify_grid()")
+    stop("dggs must be a grid object from hexify_grid() or hex_grid()")
   }
-  
+
   # Check required fields exist
   required_fields <- c("aperture", "topology", "projection")
   missing_fields <- setdiff(required_fields, names(dggs))

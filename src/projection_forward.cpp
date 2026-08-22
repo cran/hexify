@@ -107,6 +107,10 @@ static ProjectionWithStatus project_to_face_with_validation(const Geo& geo, cons
 }
 
 std::pair<double,double> project_to_face(const Geo& geo, const IcosaData& ico_data, int face) {
+  if (face < kMinFace || face > kMaxFace) {
+    throw std::invalid_argument("project_to_face: face must be between 0 and 19");
+  }
+
   const double glon = geo.lon;
   const double glat = geo.lat;
 
@@ -192,6 +196,9 @@ static double face_distance(const Geo& point, const IcosaData& ico_data, int fac
 }
 
 ProjectionResult snyder_forward(double lon_deg, double lat_deg) {
+  if (!std::isfinite(lon_deg) || !std::isfinite(lat_deg)) {
+    throw std::invalid_argument("snyder_forward: lon_deg/lat_deg must be finite (not NA/NaN/Inf)");
+  }
   const IcosaData& ico_data = ico();
   const Geo g(deg2rad(lon_deg), deg2rad(lat_deg));
 

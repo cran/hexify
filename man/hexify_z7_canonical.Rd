@@ -7,35 +7,44 @@
 hexify_z7_canonical(index, max_iterations = 128L)
 }
 \arguments{
-\item{index}{Z7 index string}
+\item{index}{A length-one Z7 index string.}
 
-\item{max_iterations}{Maximum iterations for cycle detection (default 128)}
+\item{max_iterations}{Maximum number of decode/encode iterations. This is a
+safety bound for legacy indices; the default is 128.}
 }
 \value{
-Canonical form (lexicographically smallest in cycle)
+A length-one character string containing the stable index.
 }
 \description{
-For Z7 indices that form cycles during decode/encode, returns the
-lexicographically smallest index in the cycle. Provides stable
-unique identifiers for aperture 7 grids.
+Decodes and re-encodes a Z7 index until it reaches a stable form. Current Z7
+indices are bijective, so every valid index is already canonical and this
+function normally returns its input unchanged. It remains available for
+validating or normalizing indices created by older hexify versions.
 }
 \examples{
-# These all return the same canonical form
+# Valid Z7 indices are stable
 hexify_z7_canonical("110001")
-hexify_z7_canonical("110002")
+
+cell <- hexify_index_to_cell("110001", aperture = 7)
+identical(
+  hexify_cell_to_index(cell$face, cell$i, cell$j,
+    cell$resolution, aperture = 7
+  ),
+  "110001"
+)
 }
 \seealso{
-Other hierarchical index: 
-\code{\link{hexify_cell_to_index}()},
-\code{\link{hexify_compare_indices}()},
-\code{\link{hexify_default_index_type}()},
-\code{\link{hexify_get_children}()},
-\code{\link{hexify_get_parent}()},
-\code{\link{hexify_get_resolution}()},
-\code{\link{hexify_index_to_cell}()},
-\code{\link{hexify_index_to_lonlat}()},
-\code{\link{hexify_is_valid_index_type}()},
-\code{\link{hexify_lonlat_to_index}()}
+Other hierarchical index:
+\code{\link[=hexify_cell_to_index]{hexify_cell_to_index()}},
+\code{\link[=hexify_compare_indices]{hexify_compare_indices()}},
+\code{\link[=hexify_default_index_type]{hexify_default_index_type()}},
+\code{\link[=hexify_get_children]{hexify_get_children()}},
+\code{\link[=hexify_get_parent]{hexify_get_parent()}},
+\code{\link[=hexify_get_resolution]{hexify_get_resolution()}},
+\code{\link[=hexify_index_to_cell]{hexify_index_to_cell()}},
+\code{\link[=hexify_index_to_lonlat]{hexify_index_to_lonlat()}},
+\code{\link[=hexify_is_valid_index_type]{hexify_is_valid_index_type()}},
+\code{\link[=hexify_lonlat_to_index]{hexify_lonlat_to_index()}}
 }
 \concept{hierarchical index}
 \keyword{internal}

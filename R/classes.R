@@ -17,24 +17,34 @@ NULL
 # so downstream functions don't need them repeated.
 # =============================================================================
 
+# A grid CRS: an 'EPSG' code, or a 'PROJ' or 'WKT' string
+setClassUnion("HexCRS", c("integer", "character"))
+
 #' HexGridInfo Class
 #'
 #' An S4 class representing a hexagonal grid specification. Stores all
 #' parameters needed for grid operations.
 #'
-#' @slot aperture Character. Grid aperture: "3", "4", "7", or "4/3" for mixed.
+#' @slot aperture Character. Grid aperture: "3", "4", "7", a mixed family such
+#'   as "4/3" or "4/7", or one aperture per resolution level ("4/4/7/3").
 #' @slot resolution Integer. Grid resolution level (0-30 for ISEA, 0-15 for H3).
 #' @slot area_km2 Numeric. Cell area in square kilometers.
 #' @slot diagonal_km Numeric. Cell diagonal (long diagonal) in kilometers.
-#' @slot crs Integer. Coordinate reference system (default 4326 = 'WGS84').
+#' @slot crs Integer or character. Coordinate reference system: an EPSG code,
+#'   or a 'PROJ' or 'WKT' string. Defaults to 'WGS84' on Earth, and to a longlat
+#'   CRS on the sphere of \code{radius_km} on any other body.
 #' @slot grid_type Character. Grid system: "isea" (default) or "h3".
+#' @slot radius_km Numeric. Radius of the body the grid covers, in kilometers.
+#'   \code{NA} reads as Earth's mean radius.
 #'
 #' @details
 #' Create HexGridInfo objects using the \code{\link{hex_grid}} constructor function.
 #' Do not use \code{new("HexGridInfo", ...)} directly.
 #'
-#' The aperture can be "3", "4", "7" for standard grids, or "4/3" for mixed
-#' aperture grids that start with aperture 4 and switch to aperture 3.
+#' The aperture can be "3", "4", "7" for grids that refine by one aperture at
+#' every level; a family name such as "4/3" or "4/7", which refines by the first
+#' aperture for the first floor(resolution / 2) levels and by the second for the
+#' rest; or one aperture per level, "4/4/7/3".
 #'
 #' For H3 grids, the aperture is fixed at "7" and resolution ranges from 0 to 15.
 #'
@@ -49,8 +59,9 @@ setClass(
     resolution = "integer",
     area_km2 = "numeric",
     diagonal_km = "numeric",
-    crs = "integer",
-    grid_type = "character"
+    crs = "HexCRS",
+    grid_type = "character",
+    radius_km = "numeric"
   ),
   prototype = list(
     aperture = "3",
@@ -58,7 +69,8 @@ setClass(
     area_km2 = NA_real_,
     diagonal_km = NA_real_,
     crs = 4326L,
-    grid_type = "isea"
+    grid_type = "isea",
+    radius_km = NA_real_
   )
 )
 
@@ -133,8 +145,13 @@ setValidity("HexGridInfo", function(object) {
     }
   } else {
     # ISEA validation
-    if (!object@aperture %in% c("3", "4", "7", "4/3")) {
-      errors <- c(errors, "aperture must be '3', '4', '7', or '4/3'")
+    ap_ok <- tryCatch({
+      parse_aperture_seq(object@aperture, object@resolution)
+      TRUE
+    }, error = function(e) FALSE)
+    if (!ap_ok) {
+      errors <- c(errors, paste0("aperture must be 3, 4, 7, a family such as \"4/3\", ",
+                                 "or one aperture per resolution level"))
     }
     if (object@resolution < 0L || object@resolution > 30L) {
       errors <- c(errors, "resolution must be between 0 and 30")
@@ -151,9 +168,26 @@ setValidity("HexGridInfo", function(object) {
     errors <- c(errors, "diagonal_km must be positive")
   }
 
-  # Validate crs (must be positive integer)
-  if (object@crs <= 0L) {
+  # Validate crs (an EPSG code, or a CRS string sf can read)
+  if (is.character(object@crs)) {
+    if (length(object@crs) != 1L || is.na(object@crs) || !nzchar(object@crs)) {
+      errors <- c(errors, "crs must be a single non-empty CRS string")
+    } else if (is.na(parse_crs(object@crs))) {
+      errors <- c(errors, sprintf(
+        "crs \"%s\" is not a coordinate reference system sf can read",
+        object@crs
+      ))
+    }
+  } else if (length(object@crs) != 1L || is.na(object@crs) || object@crs <= 0L) {
     errors <- c(errors, "crs must be a positive integer EPSG code")
+  }
+
+  # Validate radius_km (must be a positive finite scalar if provided)
+  if (length(object@radius_km) != 1L) {
+    errors <- c(errors, "radius_km must be a single number")
+  } else if (!is.na(object@radius_km) &&
+             (!is.finite(object@radius_km) || object@radius_km <= 0)) {
+    errors <- c(errors, "radius_km must be positive")
   }
 
   if (length(errors) == 0) TRUE else errors
@@ -180,14 +214,18 @@ setValidity("HexData", function(object) {
     }
   }
 
-  # Check cell_id length matches data rows
+  # Check cell_id length matches data rows. `length(cell_id) != n_rows` alone
+  # already correctly allows the valid empty-prototype case (0 != 0 is
+  # FALSE), so no extra "> 0" guard is needed -- and such a guard would hide
+  # exactly the corrupt case this check exists to catch (data has rows but
+  # cell_id is empty).
   n_rows <- nrow(object@data)
-  if (length(object@cell_id) != n_rows && length(object@cell_id) > 0) {
+  if (length(object@cell_id) != n_rows) {
     errors <- c(errors, "cell_id length must match number of data rows")
   }
 
-  # Check cell_center dimensions
-  if (nrow(object@cell_center) != n_rows && nrow(object@cell_center) > 0) {
+  # Check cell_center dimensions (same reasoning as cell_id above)
+  if (nrow(object@cell_center) != n_rows) {
     errors <- c(errors, "cell_center rows must match number of data rows")
   }
   if (ncol(object@cell_center) != 2 && nrow(object@cell_center) > 0) {
@@ -389,6 +427,11 @@ setMethod("$<-", "HexData", function(x, name, value) {
 
 #' @rdname HexData-methods
 #' @keywords internal
+#' @details
+#' Unlike \code{[.data.frame}, \code{drop} defaults to \code{FALSE}: selecting
+#' a single column returns a \code{HexData} object (preserving \code{grid}/
+#' \code{cell_id}/\code{cell_center}) rather than dropping to a bare vector.
+#' Pass \code{drop = TRUE} explicitly to get data.frame-style dropping.
 #' @export
 setMethod("[", c("HexData", "ANY", "ANY"), function(x, i, j, ..., drop = FALSE) {
   # Create new HexData with subsetted data
@@ -465,7 +508,11 @@ setMethod("show", "HexGridInfo", function(object) {
       cat(sprintf("Avg Diagonal:%.2f km\n", object@diagonal_km))
     }
 
-    cat(sprintf("CRS:         EPSG:%d\n", object@crs))
+    cat(sprintf("CRS:         %s\n", format_crs(object@crs)))
+
+    if (!is_earth_grid(object)) {
+      cat(sprintf("Radius:      %.2f km\n", grid_radius_km(object)))
+    }
 
     h3_n_cells <- 2 + 120 * 7^object@resolution
     cat(sprintf("Total Cells: %.0f\n", h3_n_cells))
@@ -483,16 +530,13 @@ setMethod("show", "HexGridInfo", function(object) {
       cat(sprintf("Diagonal:    %.2f km\n", object@diagonal_km))
     }
 
-    cat(sprintf("CRS:         EPSG:%d\n", object@crs))
+    cat(sprintf("CRS:         %s\n", format_crs(object@crs)))
 
-    # Calculate total cells based on aperture
-    if (object@aperture == "4/3") {
-      level <- as.integer(object@resolution / 2)
-      n_cells <- 10 * (4^level) * (3^(object@resolution - level)) + 2
-    } else {
-      ap <- as.integer(object@aperture)
-      n_cells <- 10 * (ap^object@resolution) + 2
+    if (!is_earth_grid(object)) {
+      cat(sprintf("Radius:      %.2f km\n", grid_radius_km(object)))
     }
+
+    n_cells <- aperture_n_cells(object@aperture, object@resolution)
     cat(sprintf("Total Cells: %.0f\n", n_cells))
   }
 
@@ -601,7 +645,8 @@ setMethod("as.list", "HexGridInfo", function(x, ...) {
     area_km2 = x@area_km2,
     diagonal_km = x@diagonal_km,
     crs = x@crs,
-    grid_type = x@grid_type
+    grid_type = x@grid_type,
+    radius_km = grid_radius_km(x)
   )
 })
 
@@ -655,9 +700,12 @@ extract_grid <- function(x, allow_null = FALSE) {
   }
 
   if (is_hex_grid(x)) {
-    # Handle deserialized old objects without grid_type slot
+    # Handle deserialized old objects without grid_type / radius_km slots
     if (!.hasSlot(x, "grid_type")) {
       x@grid_type <- "isea"
+    }
+    if (!.hasSlot(x, "radius_km")) {
+      x@radius_km <- EARTH_RADIUS_KM
     }
     return(x)
   }
@@ -666,6 +714,9 @@ extract_grid <- function(x, allow_null = FALSE) {
     g <- x@grid
     if (!.hasSlot(g, "grid_type")) {
       g@grid_type <- "isea"
+    }
+    if (!.hasSlot(g, "radius_km")) {
+      g@radius_km <- EARTH_RADIUS_KM
     }
     return(g)
   }
@@ -692,7 +743,8 @@ hexify_grid_to_HexGridInfo <- function(x) {
       resolution = as.integer(x$resolution),
       area_km2 = area,
       diagonal_km = diagonal,
-      crs = 4326L)
+      crs = resolve_crs(x$crs, grid_radius_km(x)),
+      radius_km = grid_radius_km(x))
 }
 
 #' Convert HexGridInfo to legacy hexify_grid
@@ -720,7 +772,7 @@ HexGridInfo_to_hexify_grid <- function(x) {
   }
 
   # Convert aperture to numeric for legacy
-  aperture_num <- if (ap == "4/3") 3L else as.integer(ap)
+  aperture_num <- aperture_to_int(ap)
 
   grid <- list(
     area = x@area_km2,
@@ -729,6 +781,7 @@ HexGridInfo_to_hexify_grid <- function(x) {
     topology = "HEXAGON",
     projection = "ISEA",
     metric = TRUE,
+    radius_km = grid_radius_km(x),
     index_type = legacy_index,
     res = x@resolution,
     topology_family = "HEXAGON",
@@ -736,7 +789,9 @@ HexGridInfo_to_hexify_grid <- function(x) {
     pole_lon_deg = ISEA_VERT0_LON_DEG,
     pole_lat_deg = ISEA_VERT0_LAT_DEG,
     azimuth_deg = ISEA_AZIMUTH_DEG,
-    aperture_type = if (ap == "4/3") "MIXED43" else "SEQUENCE",
+    # MIXED43 is DGGRID's own name for the 4/3 arrangement; other sequences
+    # have no DGGRID aperture type, so they carry the generic label.
+    aperture_type = if (ap == "4/3") "MIXED43" else if (is_mixed_aperture(ap)) "MIXED" else "SEQUENCE",
     res_spec = x@resolution,
     precision = 7
   )

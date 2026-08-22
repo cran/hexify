@@ -2,7 +2,7 @@
 % Please edit documentation in R/hexify_stats.R
 \name{dgearthstat}
 \alias{dgearthstat}
-\title{Get grid statistics for Earth coverage}
+\title{Get grid statistics for whole-body coverage}
 \usage{
 dgearthstat(dggs)
 }
@@ -11,7 +11,7 @@ dgearthstat(dggs)
 }
 \value{
 List with components:
-\item{area_km}{Total Earth surface area in km^2}
+\item{area_km}{Total surface area of the body in km^2}
 \item{n_cells}{Total number of cells at this resolution}
 \item{cell_area_km2}{Average cell area in km^2}
 \item{cell_spacing_km}{Average distance between cell centers in km}
@@ -20,7 +20,9 @@ List with components:
 }
 \description{
 Calculates statistics about the hexagonal grid at the current resolution,
-including total number of cells, cell area, and cell spacing.
+including total number of cells, cell area, and cell spacing. Figures follow
+the radius the grid carries, so a grid built with \code{radius_km} reports
+that body's areas and distances.
 }
 \examples{
 grid <- hexify_grid(area = 1000, aperture = 3)
@@ -34,12 +36,12 @@ print(sprintf("Average cell spacing: \%.2f km",
               stats$cell_spacing_km))
 }
 \seealso{
-Other grid statistics: 
-\code{\link{dg_closest_res_to_area}()},
-\code{\link{hexify_area_to_eff_res}()},
-\code{\link{hexify_compare_resolutions}()},
-\code{\link{hexify_eff_res_to_area}()},
-\code{\link{hexify_eff_res_to_resolution}()},
-\code{\link{hexify_resolution_to_eff_res}()}
+Other grid statistics:
+\code{\link[=dg_closest_res_to_area]{dg_closest_res_to_area()}},
+\code{\link[=hexify_area_to_eff_res]{hexify_area_to_eff_res()}},
+\code{\link[=hexify_compare_resolutions]{hexify_compare_resolutions()}},
+\code{\link[=hexify_eff_res_to_area]{hexify_eff_res_to_area()}},
+\code{\link[=hexify_eff_res_to_resolution]{hexify_eff_res_to_resolution()}},
+\code{\link[=hexify_resolution_to_eff_res]{hexify_resolution_to_eff_res()}}
 }
 \concept{grid statistics}

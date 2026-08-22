@@ -7,13 +7,13 @@
 [![Codecov test coverage](https://codecov.io/gh/gcol33/hexify/graph/badge.svg)](https://app.codecov.io/gh/gcol33/hexify)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 
-**Hexagonal Grids for Global Spatial Analysis — ISEA + H3**
+**Equal-Area Hexagonal Grids for Global Spatial Analysis**
 
 <p align="center">
   <img src="man/figures/hexify-hero.png" alt="Multi-resolution hexagonal grids" width="100%">
 </p>
 
-The `hexify` package provides fast, accurate assignment of geographic coordinates to hexagonal grid cells. It supports two grid systems: **ISEA** (Icosahedral Snyder Equal Area) for guaranteed equal-area cells, and **H3** (Uber's hierarchical hex system) for compatibility with industry-standard workflows like FCC broadband mapping. Whether you're aggregating species occurrences, analyzing point patterns, or preparing data for spatial modeling, `hexify` gives you one consistent interface for both systems.
+`hexify` assigns geographic coordinates to equal-area hexagonal grid cells using the ISEA (Icosahedral Snyder Equal Area) projection. Every cell has the same area regardless of latitude, eliminating the sampling bias inherent in rectangular lat-lon grids. H3 is supported for compatibility with existing H3 workflows.
 
 ## Quick Start
 
@@ -41,19 +41,24 @@ plot(result_h3)
 
 Spatial binning is fundamental to ecological modeling, epidemiology, and geographic analysis. Standard approaches using rectangular lat-lon grids introduce severe area distortions: a 1° cell at the equator covers ~12,300 km², while the same cell near the poles covers a fraction of that area. This violates the equal-sampling assumption underlying most spatial statistics.
 
-Discrete Global Grid Systems (DGGS) solve this by partitioning Earth's surface into cells of uniform area. hexify implements two hex grid systems:
+Discrete Global Grid Systems (DGGS) solve this by partitioning Earth's surface into cells of uniform area. hexify's primary backend is **ISEA** (Icosahedral Snyder Equal Area): true equal-area hexagonal grids with apertures 3, 4 and 7 in any sequence, implemented in C++ with no external dependencies. For interoperability with industry ecosystems (FCC, Foursquare, DuckDB), hexify also supports **H3** grids via a vendored C library.
 
-- **ISEA** — True equal-area hexagonal grids with apertures 3, 4, 7, or mixed 4/3. Fast C++ implementation. Compatible with dggridR cell IDs.
-- **H3** — Uber's hierarchical hexagonal system (resolutions 0–15). Industry standard used by the FCC, Foursquare, and others. Powered by the `h3o` package.
-
-Both systems share the same interface: `hexify()`, `cell_to_sf()`, `grid_rect()`, `get_parent()`, `get_children()`, and all other functions work with either grid type.
-
-These features make hexify suitable for:
+Equal-area grids are directly applicable to:
 
 - Species distribution modeling and biodiversity assessments
 - Epidemiological surveillance and disease mapping
 - Environmental monitoring and remote sensing aggregation
 - Any analysis requiring unbiased spatial binning
+
+## Why Hexagonal Grids?
+
+Hexagons tile the sphere with three properties that squares and triangles lack:
+
+1. **Equal area** — every cell covers the same surface area, from equator to pole
+2. **Uniform adjacency** — all six neighbors share an edge (no ambiguous diagonal neighbors)
+3. **Low shape distortion** — hexagons approximate circles better than any other regular polygon, minimizing edge effects in spatial statistics
+
+These properties make hexagonal grids the natural choice for unbiased spatial binning. Rectangular lat-lon grids, by contrast, shrink toward the poles: a 1° cell at 60°N has half the area of the same cell at the equator.
 
 ## Features
 
@@ -62,6 +67,7 @@ These features make hexify suitable for:
 - **`hex_grid()`**: Define a grid by target cell area (km²) or resolution level
 - **`hexify()`**: Assign points to grid cells (data.frame or sf input)
 - **`plot()` / `hexify_heatmap()`**: Visualize results with base R or ggplot2
+- **Any body**: `hex_grid(area_km2 = 1000, radius_km = "mars")` sizes a grid on Mars, the Moon, Titan, or any radius you give — both backends
 
 ### Grid Generation
 
@@ -80,7 +86,7 @@ These features make hexify suitable for:
 - **`as_dggrid()` / `from_dggrid()`**: Convert to/from dggridR format
 - **`as_sf()`**: Export HexData to sf object
 - **`as.data.frame()`**: Extract data with cell assignments
-- **H3 support**: `hex_grid(resolution = 8, type = "h3")` — requires `h3o` package
+- **H3 support**: `hex_grid(resolution = 8, type = "h3")` — vendored H3 C library, no extra install needed
 
 ## Installation
 
@@ -103,7 +109,14 @@ library(hexify)
 # Define grid: ~10,000 km² cells
 grid <- hex_grid(area_km2 = 10000)
 grid
-#> HexGridInfo: aperture=3, resolution=5, area=12364.17 km²
+#> HexGridInfo Specification
+#> -------------------------
+#> Aperture:    3
+#> Resolution:  8
+#> Area:        7773.97 km^2
+#> Diagonal:    94.74 km
+#> CRS:         EPSG:4326
+#> Total Cells: 65612
 
 # Assign coordinates to cells
 coords <- data.frame(
@@ -189,6 +202,12 @@ ggplot(cell_polys) +
   scale_fill_viridis_c() +
   theme_minimal()
 ```
+
+## Known Limitations
+
+- **H3 grids**: Fixed aperture 7, maximum resolution 15 (~0.9 m² cells). ISEA grids support apertures 3, 4 and 7 in any sequence up to resolution 30.
+- **Pentagons**: Any hexagonal tiling of a sphere requires exactly 12 pentagonal cells (at icosahedron vertices). These cells have 5 neighbors instead of 6. Use `is_pentagon()` to detect them.
+- **Projection precision**: The inverse Snyder projection uses iterative Newton-Raphson convergence. Default precision is sufficient for sub-meter accuracy; use `hexify_set_precision()` to adjust the speed/accuracy trade-off.
 
 ## Documentation
 

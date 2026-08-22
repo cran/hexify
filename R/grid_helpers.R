@@ -5,6 +5,70 @@
 # to accept grid specifications, eliminating the need to repeat
 # aperture/resolution parameters.
 
+#' Normalize antimeridian-crossing polygon coordinates
+#'
+#' Shifts longitudes of a ring's coordinate matrix so an antimeridian-crossing
+#' polygon becomes contiguous instead of spanning nearly the full -180 to 180
+#' range. Downstream `sf::st_wrap_dateline()` then splits it correctly for
+#' flat-map rendering.
+#'
+#' @param coords A 2+ column matrix whose first column is longitude
+#' @return The same matrix, with the longitude column normalized if the ring
+#'   crosses the antimeridian
+#' @noRd
+normalize_antimeridian_coords <- function(coords) {
+  lons <- coords[, 1]
+  lon_range <- max(lons, na.rm = TRUE) - min(lons, na.rm = TRUE)
+
+  if (lon_range > 180) {
+    # Polygon crosses antimeridian - normalize to be contiguous.
+    # Shift negative lons to 0-360 range.
+    lons[lons < 0] <- lons[lons < 0] + 360
+    coords[, 1] <- lons
+
+    # Now shift back to standard range, but keeping contiguity: if the
+    # centroid ends up > 180, shift everything by -360.
+    mean_lon <- mean(lons)
+    if (mean_lon > 180) {
+      coords[, 1] <- coords[, 1] - 360
+    }
+  }
+
+  coords
+}
+
+#' Build hexagon polygons for ISEA cell IDs
+#'
+#' Antimeridian-crossing rings are normalized so each polygon is contiguous;
+#' callers that render on a flat map pass the result through
+#' `sf::st_wrap_dateline()` to split them at +/-180.
+#'
+#' @param cell_id Numeric vector of cell IDs
+#' @param resolution Grid resolution level
+#' @param aperture Grid aperture: 3, 4, 7, or a mixed sequence spelling
+#' @param crs CRS the polygons carry, as sf reads it
+#' @return An sfc of POLYGON geometries, one per cell ID, in input order
+#' @noRd
+isea_cells_to_sfc <- function(cell_id, resolution, aperture, crs = 4326) {
+  corners_list <- if (is_mixed_aperture(aperture)) {
+    mixed_cell_corners(cell_id, resolution, aperture)
+  } else {
+    cpp_cell_to_corners(
+      as.numeric(cell_id),
+      as.integer(resolution),
+      as.integer(aperture)
+    )
+  }
+
+  polygons <- lapply(corners_list, function(coords) {
+    sf::st_polygon(list(normalize_antimeridian_coords(coords)))
+  })
+
+  # suppressWarnings: antimeridian normalization may temporarily produce
+  # out-of-range longitudes that st_wrap_dateline corrects downstream
+  suppressWarnings(sf::st_make_valid(sf::st_sfc(polygons, crs = crs)))
+}
+
 # =============================================================================
 # COORDINATE CONVERSION HELPERS
 # =============================================================================
@@ -43,13 +107,11 @@ lonlat_to_cell <- function(lon, lat, grid) {
     return(cpp_h3_latLngToCell(as.numeric(lon), as.numeric(lat), g@resolution))
   }
 
-  if (g@aperture == "4/3") {
-    level <- as.integer(g@resolution / 2)
-    cpp_lonlat_to_cell_ap43(
+  if (is_mixed_aperture(g@aperture)) {
+    cpp_lonlat_to_cell_seq(
       as.numeric(lon),
       as.numeric(lat),
-      g@resolution,
-      level
+      grid_ap_seq(g)
     )
   } else {
     cpp_lonlat_to_cell(
@@ -85,12 +147,10 @@ cell_to_lonlat <- function(cell_id, grid) {
     return(data.frame(lon_deg = result$lon, lat_deg = result$lat))
   }
 
-  if (g@aperture == "4/3") {
-    level <- as.integer(g@resolution / 2)
-    cpp_cell_to_lonlat_ap43(
+  if (is_mixed_aperture(g@aperture)) {
+    cpp_cell_to_lonlat_seq(
       as.numeric(cell_id),
-      g@resolution,
-      level
+      grid_ap_seq(g)
     )
   } else {
     cpp_cell_to_lonlat(
@@ -163,19 +223,10 @@ cell_to_sf <- function(cell_id = NULL, grid, wrap_dateline = TRUE) {
     boundaries <- cpp_h3_cellToBoundary(as.character(cell_id))
     polygons <- lapply(boundaries, function(coords) {
       if (nrow(coords) == 0) return(sf::st_polygon())
-      lons <- coords[, 1]
-      lon_range <- max(lons, na.rm = TRUE) - min(lons, na.rm = TRUE)
-      if (lon_range > 180) {
-        lons[lons < 0] <- lons[lons < 0] + 360
-        coords[, 1] <- lons
-        mean_lon <- mean(lons)
-        if (mean_lon > 180) {
-          coords[, 1] <- coords[, 1] - 360
-        }
-      }
+      coords <- normalize_antimeridian_coords(coords)
       sf::st_polygon(list(coords))
     })
-    sfc <- sf::st_sfc(polygons, crs = g@crs)
+    sfc <- sf::st_sfc(polygons, crs = grid_crs(g))
     sfc <- suppressWarnings(sf::st_make_valid(sfc))
     result_sf <- sf::st_sf(cell_id = as.character(cell_id), geometry = sfc)
     if (wrap_dateline) {
@@ -185,49 +236,10 @@ cell_to_sf <- function(cell_id = NULL, grid, wrap_dateline = TRUE) {
     return(result_sf)
   }
 
-  # ISEA path: generate polygons using C++ function
-  # Convert aperture to integer for C++ (mixed aperture "4/3" uses 3)
-  aperture_int <- if (g@aperture == "4/3") 3L else as.integer(g@aperture)
-
-  corners_list <- cpp_cell_to_corners(
-    as.numeric(cell_id),
-    g@resolution,
-    aperture_int
-  )
-
-
-  # Handle antimeridian-crossing polygons: normalize coordinates so each
-  # polygon is contiguous. When wrap_dateline = TRUE, st_wrap_dateline
-  # then splits at ±180° for correct flat-map rendering. For globe/
-  # orthographic projections, pass wrap_dateline = FALSE to keep cells intact.
-
-  polygons <- lapply(corners_list, function(coords) {
-    lons <- coords[, 1]
-    lon_range <- max(lons, na.rm = TRUE) - min(lons, na.rm = TRUE)
-
-    if (lon_range > 180) {
-      # Polygon crosses antimeridian - normalize to be contiguous
-      # Shift negative lons to 0-360 range
-      lons[lons < 0] <- lons[lons < 0] + 360
-      coords[, 1] <- lons
-
-      # Now shift back to standard range, but keeping contiguity
-      # If centroid is > 180, shift everything by -360
-      mean_lon <- mean(lons)
-      if (mean_lon > 180) {
-        coords[, 1] <- coords[, 1] - 360
-      }
-    }
-
-    sf::st_polygon(list(coords))
-  })
-
-  sfc <- sf::st_sfc(polygons, crs = g@crs)
-
-  # Fix any invalid geometries (self-intersecting polygons, etc.)
-  # suppressWarnings: antimeridian normalization may temporarily produce
-  # out-of-range longitudes that st_wrap_dateline corrects below
-  sfc <- suppressWarnings(sf::st_make_valid(sfc))
+  # ISEA path: generate polygons using C++ function. For globe/orthographic
+  # projections, pass wrap_dateline = FALSE to keep cells intact.
+  sfc <- isea_cells_to_sfc(cell_id, g@resolution, g@aperture,
+                           crs = grid_crs(g))
 
   result_sf <- sf::st_sf(cell_id = cell_id, geometry = sfc)
   if (wrap_dateline) {
@@ -294,7 +306,7 @@ grid_rect <- function(bbox, grid) {
 
   # Create sampling grid - use diagonal_km from grid if available
   diagonal <- if (!is.na(g@diagonal_km)) g@diagonal_km else sqrt(g@area_km2 * 2 / sqrt(3))
-  spacing_deg <- diagonal / KM_PER_DEGREE * 0.8
+  spacing_deg <- diagonal / km_per_degree(grid_radius_km(g)) * 0.8
 
   lons <- seq(minlon, maxlon, by = spacing_deg)
   lats <- seq(minlat, maxlat, by = spacing_deg)
@@ -364,13 +376,7 @@ grid_global <- function(grid, wrap_dateline = TRUE) {
   }
 
   # Estimate cell count for warning (ISEA)
-  if (g@aperture == "4/3") {
-    level <- as.integer(g@resolution / 2)
-    n_cells <- 10 * (4^level) * (3^(g@resolution - level)) + 2
-  } else {
-    ap <- as.integer(g@aperture)
-    n_cells <- 10 * (ap^g@resolution) + 2
-  }
+  n_cells <- aperture_n_cells(g@aperture, g@resolution)
   if (n_cells > 100000) {
     warning(sprintf(
       "This will generate approximately %.0f cells. Consider larger area_km2.",
@@ -380,7 +386,7 @@ grid_global <- function(grid, wrap_dateline = TRUE) {
 
   # Dense sampling - use diagonal_km from grid if available
   diagonal <- if (!is.na(g@diagonal_km)) g@diagonal_km else sqrt(g@area_km2 * 2 / sqrt(3))
-  spacing_deg <- diagonal / KM_PER_DEGREE * 0.7
+  spacing_deg <- diagonal / km_per_degree(grid_radius_km(g)) * 0.7
 
   lons <- seq(-180, 180, by = spacing_deg)
   lats <- seq(-85, 85, by = spacing_deg)
@@ -575,9 +581,10 @@ grid_clip <- function(boundary, grid, crop = TRUE) {
 #' For ISEA grids the area is constant across all cells and is read directly
 #' from the grid specification.
 #'
-#' For H3 grids the area varies by latitude. This function computes geodesic
-#' area via \code{sf::st_area()} on H3 cell polygons, with results cached in a
-#' session-scoped environment so repeated calls for the same cells are fast.
+#' For H3 grids the area varies by latitude. The vendored 'H3' library computes
+#' each cell's spherical polygon area as a solid angle, which this function
+#' reads on the grid's body, so a grid built with \code{radius_km} reports that
+#' body's areas.
 #'
 #' @seealso \code{\link{hex_grid}} for grid specifications,
 #'   \code{\link{h3_crosswalk}} for ISEA/H3 interoperability
@@ -613,17 +620,13 @@ cell_area <- function(cell_id = NULL, grid) {
   # ISEA: constant equal-area
   if (!is_h3_grid(g)) {
     areas <- rep(g@area_km2, length(cell_id))
-    if (is.numeric(cell_id)) {
-      names(areas) <- as.character(as.integer(cell_id))
-    } else {
-      names(areas) <- as.character(cell_id)
-    }
+    names(areas) <- as.character(cell_id)
     return(areas)
   }
 
-  # H3: per-cell area via native C backend
+  # H3: per-cell area via native C backend, read on the grid's body
   cell_id <- as.character(cell_id)
-  areas <- cpp_h3_cellAreaKm2(cell_id)
+  areas <- scale_area_to_body(cpp_h3_cellAreaKm2(cell_id), grid_radius_km(g))
   names(areas) <- cell_id
   areas
 }
@@ -632,6 +635,38 @@ cell_area <- function(cell_id = NULL, grid) {
 # =============================================================================
 # HIERARCHICAL INDEX HELPERS
 # =============================================================================
+
+#' Hierarchical index string of one cell on a pure-aperture grid
+#'
+#' The index encoders work on (quad, i, j), so a cell ID makes the round trip
+#' through `cpp_cell_to_quad_ij()` first. `cell_to_index()`, `get_parent()` and
+#' `get_children()` all enter the hierarchy this way.
+#'
+#' @param cell_id One cell ID
+#' @param resolution Resolution the cell ID belongs to
+#' @param aperture_int Integer aperture (3, 4 or 7)
+#' @param index_type One of "z3", "z7", "zorder"
+#' @return Index string
+#' @noRd
+isea_cell_to_index_one <- function(cell_id, resolution, aperture_int, index_type) {
+  qij <- cpp_cell_to_quad_ij(cell_id, resolution, aperture_int)
+  cpp_cell_to_index(qij$quad, qij$i, qij$j, resolution, aperture_int, index_type)
+}
+
+#' Cell ID of one hierarchical index string on a pure-aperture grid
+#'
+#' Inverse of [isea_cell_to_index_one()]. The index carries its own resolution,
+#' which is the one the returned cell ID belongs to.
+#'
+#' @param index One index string
+#' @param aperture_int Integer aperture (3, 4 or 7)
+#' @param index_type One of "z3", "z7", "zorder"
+#' @return Cell ID
+#' @noRd
+isea_index_to_cell_one <- function(index, aperture_int, index_type) {
+  cell <- cpp_index_to_cell(index, aperture_int, index_type)
+  cpp_quad_ij_to_cell(cell$face, cell$i, cell$j, cell$resolution, aperture_int)
+}
 
 #' Convert cell ID to hierarchical index string
 #'
@@ -653,24 +688,21 @@ cell_to_index <- function(cell_id, grid) {
     return(as.character(cell_id))
   }
 
+  # Mixed sequences use a geometric hierarchical index (see
+  # R/aperture_mixed_hierarchy.R); pure apertures use the Z7/Z3/zorder encoders.
+  if (is_mixed_aperture(g@aperture)) {
+    return(vapply(as.numeric(cell_id),
+                  function(id) mixed_cell_to_index_one(id, g@resolution, g@aperture),
+                  character(1)))
+  }
+
   # Determine index type based on aperture
-  index_type <- if (g@aperture == "3") "z3"
-                else if (g@aperture == "7") "z7"
-                else "zorder"
+  index_type <- index_type_for_aperture(g@aperture)
+  aperture_int <- aperture_to_int(g@aperture)
 
-
-  # Convert aperture to integer for C++ functions
-  aperture_int <- if (g@aperture == "4/3") 3L else as.integer(g@aperture)
-
-  sapply(cell_id, function(id) {
-    # Get quad/ij coordinates
-    qij <- cpp_cell_to_quad_ij(id, g@resolution, aperture_int)
-    # Encode to index
-    cpp_cell_to_index(
-      qij$quad, qij$i, qij$j,
-      g@resolution, aperture_int, index_type
-    )
-  })
+  vapply(as.numeric(cell_id), isea_cell_to_index_one, character(1),
+         resolution = g@resolution, aperture_int = aperture_int,
+         index_type = index_type, USE.NAMES = FALSE)
 }
 
 #' Get parent cell
@@ -705,33 +737,25 @@ get_parent <- function(cell_id, grid, levels = 1L) {
     return(cpp_h3_cellToParent(as.character(cell_id), parent_res))
   }
 
-  index_type <- if (g@aperture == "3") "z3"
-                else if (g@aperture == "7") "z7"
-                else "zorder"
+  # Mixed sequences: geometric parent (centre re-quantised at the coarser resolution).
+  if (is_mixed_aperture(g@aperture)) {
+    return(mixed_get_parent(as.numeric(cell_id), g@resolution, g@aperture,
+                            as.integer(levels)))
+  }
 
-  # Convert aperture to integer for C++ functions
-  aperture_int <- if (g@aperture == "4/3") 3L else as.integer(g@aperture)
+  index_type <- index_type_for_aperture(g@aperture)
+  aperture_int <- aperture_to_int(g@aperture)
+  levels <- as.integer(levels)
 
-  # Get index, get parent, convert back
-  parent_res <- g@resolution - levels
-
-  sapply(cell_id, function(id) {
-    # Get quad/ij at current resolution
-    qij <- cpp_cell_to_quad_ij(id, g@resolution, aperture_int)
-
-    # Get index string
-    idx <- cpp_cell_to_index(qij$quad, qij$i, qij$j,
-                             g@resolution, aperture_int, index_type)
-
-    # Get parent index
-    parent_idx <- cpp_get_parent_index(idx, aperture_int, index_type)
-
-    # Convert back to cell ID at parent resolution
-    # cpp_index_to_cell returns face, i, j, resolution - not cell_id
-    result <- cpp_index_to_cell(parent_idx, aperture_int, index_type)
-    # Convert quad/ij coordinates to cell ID
-    cpp_quad_ij_to_cell(result$face, result$i, result$j, result$resolution, aperture_int)
-  })
+  # cpp_get_parent_index() strips one level off the index string, so `levels`
+  # levels up is that many strips.
+  vapply(as.numeric(cell_id), function(id) {
+    idx <- isea_cell_to_index_one(id, g@resolution, aperture_int, index_type)
+    for (step in seq_len(levels)) {
+      idx <- cpp_get_parent_index(idx, aperture_int, index_type)
+    }
+    isea_index_to_cell_one(idx, aperture_int, index_type)
+  }, numeric(1), USE.NAMES = FALSE)
 }
 
 #' Get children cells
@@ -762,27 +786,29 @@ get_children <- function(cell_id, grid, levels = 1L) {
     stop("Cannot get children: would exceed maximum resolution")
   }
 
-  index_type <- if (g@aperture == "3") "z3"
-                else if (g@aperture == "7") "z7"
-                else "zorder"
+  # Mixed sequences: geometric children (cells whose geometric parent is this cell).
+  if (is_mixed_aperture(g@aperture)) {
+    child_res <- g@resolution + as.integer(levels)
+    ncc <- aperture_n_cells(g@aperture, child_res)
+    return(lapply(as.numeric(cell_id), function(id)
+      mixed_get_children_one(id, g@resolution, child_res, g@aperture, ncc)))
+  }
 
-  # Convert aperture to integer for C++ functions
-  aperture_int <- if (g@aperture == "4/3") 3L else as.integer(g@aperture)
+  index_type <- index_type_for_aperture(g@aperture)
+  aperture_int <- aperture_to_int(g@aperture)
+  levels <- as.integer(levels)
 
-  lapply(cell_id, function(id) {
-    qij <- cpp_cell_to_quad_ij(id, g@resolution, aperture_int)
-    idx <- cpp_cell_to_index(qij$quad, qij$i, qij$j,
-                             g@resolution, aperture_int, index_type)
-
-    # Get children indices
-    children_idx <- cpp_get_children_indices(idx, aperture_int, index_type)
-
-    # Convert to cell IDs
-    # cpp_index_to_cell returns face, i, j, resolution - not cell_id
-    sapply(children_idx, function(child_idx) {
-      result <- cpp_index_to_cell(child_idx, aperture_int, index_type)
-      # Convert quad/ij coordinates to cell ID
-      cpp_quad_ij_to_cell(result$face, result$i, result$j, result$resolution, aperture_int)
-    })
+  # cpp_get_children_indices() expands one level, so `levels` levels down is
+  # that many expansions of the whole front.
+  lapply(as.numeric(cell_id), function(id) {
+    idx <- isea_cell_to_index_one(id, g@resolution, aperture_int, index_type)
+    for (step in seq_len(levels)) {
+      idx <- unlist(lapply(idx, cpp_get_children_indices,
+                           aperture = aperture_int, index_type = index_type),
+                    use.names = FALSE)
+    }
+    vapply(idx, isea_index_to_cell_one, numeric(1),
+           aperture_int = aperture_int, index_type = index_type,
+           USE.NAMES = FALSE)
   })
 }

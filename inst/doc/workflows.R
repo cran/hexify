@@ -1,10 +1,5 @@
 ## ----setup, include = FALSE---------------------------------------------------
-knitr::opts_chunk$set(
-  collapse = TRUE,
-  comment = "#>",
-  fig.width = 7,
-  fig.height = 5
-)
+source("_common.R")
 library(hexify)
 library(sf)
 library(ggplot2)
@@ -103,9 +98,9 @@ ggplot() +
   geom_sf(data = europe_hexes, fill = NA, color = "steelblue", linewidth = 0.4) +
   coord_sf(xlim = c(-10, 25), ylim = c(35, 60)) +
   labs(title = sprintf("Hexagonal Grid (~%.0f km² cells)", grid@area_km2)) +
-  theme_minimal()
+  theme_minimal(base_size = FIG_BASE_SIZE)
 
-## ----grid-polygon, fig.width=6, fig.height=6----------------------------------
+## ----grid-polygon, fig.width=7, fig.height=7----------------------------------
 # Get France boundary
 france <- hexify_world[hexify_world$name == "France", ]
 
@@ -121,10 +116,11 @@ ggplot() +
   geom_sf(data = france_grid_clipped, fill = alpha("steelblue", 0.3),
           color = "steelblue", linewidth = 0.3) +
   coord_sf(xlim = c(-5, 10), ylim = c(41, 52)) +
-  labs(title = sprintf("Hexagonal Grid Clipped to France (~%.0f km² cells)", grid@area_km2)) +
-  theme_minimal()
+  labs(title = "Hexagonal Grid Clipped to France",
+       subtitle = sprintf("~%.0f km² cells", grid@area_km2)) +
+  theme_minimal(base_size = FIG_BASE_SIZE)
 
-## ----grid-global, fig.width=8, fig.height=4, warning=FALSE--------------------
+## ----grid-global, fig.width=7, fig.height=3.5, warning=FALSE------------------
 # Coarse global grid (be careful with fine grids - many cells!)
 grid <- hex_grid(area_km2 = 500000)
 global_hexes <- grid_global(grid)
@@ -133,7 +129,7 @@ ggplot() +
   geom_sf(data = hexify_world, fill = "gray90", color = "gray70", linewidth = 0.2) +
   geom_sf(data = global_hexes, fill = NA, color = "darkgreen", linewidth = 0.3) +
   labs(title = sprintf("Global Hexagonal Grid (~%.0f km² cells)", grid@area_km2)) +
-  theme_minimal() +
+  theme_minimal(base_size = FIG_BASE_SIZE) +
   theme(axis.text = element_blank(), axis.ticks = element_blank())
 
 ## ----multi-resolution---------------------------------------------------------
@@ -218,6 +214,16 @@ city_weather <- merge(
 
 city_weather
 
+## ----cell-summarize-----------------------------------------------------------
+# Aggregate the station data straight from the HexData object
+hex_summarize(stations_hex, mean_temp = mean(temperature), n_stations = length(temperature))
+
+## ----cell-neighbors-----------------------------------------------------------
+# The 6 cells surrounding a given cell (k = 1), or a wider ring with k > 1
+some_cell <- stations_hex@cell_id[1]
+get_neighbors(some_cell, grid)
+get_neighbors(some_cell, grid, k = 2)
+
 ## ----choosing-resolution------------------------------------------------------
 # Target: 100 km² cells
 grid_100 <- hex_grid(area_km2 = 100, aperture = 3)
@@ -243,10 +249,20 @@ comparison$n_cells_fmt <- ifelse(
          sprintf("%.1fK", comparison$n_cells / 1e3),
          as.character(comparison$n_cells))
 )
+comparison$area_fmt <- ifelse(
+  comparison$cell_area_km2 < 0.1,
+  formatC(comparison$cell_area_km2, format = "e", digits = 1),
+  formatC(comparison$cell_area_km2, format = "f", digits = 1, big.mark = ",")
+)
+comparison$spacing_fmt <- ifelse(
+  comparison$cell_spacing_km < 0.1,
+  formatC(comparison$cell_spacing_km, format = "e", digits = 1),
+  formatC(comparison$cell_spacing_km, format = "f", digits = 1)
+)
 knitr::kable(
-  comparison[, c("resolution", "n_cells_fmt", "cell_area_km2", "cell_spacing_km")],
-  col.names = c("Resolution", "# Cells", "Cell Area (km²)", "Spacing (km)"),
-  digits = 1
+  comparison[, c("resolution", "n_cells_fmt", "area_fmt", "spacing_fmt")],
+  col.names = c("Resolution", "# Cells", "Cell Area (km\u00b2)", "Spacing (km)"),
+  align = c("r", "r", "r", "r")
 )
 
 ## ----compare-apertures--------------------------------------------------------
@@ -260,6 +276,41 @@ for (ap in c(3, 4, 7)) {
               ap, grid@resolution, grid@area_km2,
               format(n_cells, big.mark = ",")))
 }
+
+## ----other-bodies-------------------------------------------------------------
+mars <- hex_grid(area_km2 = 1000, radius_km = "mars")
+mars
+
+# The same grid, by radius
+identical(mars@area_km2, hex_grid(resolution = mars@resolution, radius_km = 3389.5)@area_km2)
+
+## ----other-bodies-geometry----------------------------------------------------
+earth <- hex_grid(resolution = 5)
+moon  <- hex_grid(resolution = 5, radius_km = "moon")
+
+lon <- c(0, 16.37, -70.5)
+lat <- c(0, 48.21, -33.4)
+
+identical(lonlat_to_cell(lon, lat, moon), lonlat_to_cell(lon, lat, earth))
+c(earth = earth@area_km2, moon = moon@area_km2)
+
+## ----other-bodies-crs---------------------------------------------------------
+mars@crs
+
+## ----other-bodies-crs-custom--------------------------------------------------
+world <- hex_grid(area_km2 = 5000, radius_km = 4200)
+world@crs
+
+## ----other-bodies-crs-explicit------------------------------------------------
+hex_grid(area_km2 = 5000, radius_km = 4200,
+         crs = "+proj=laea +lat_0=0 +lon_0=0 +R=4200000 +no_defs")@crs
+
+## ----other-bodies-h3----------------------------------------------------------
+h3_mars <- hex_grid(resolution = 5, type = "h3", radius_km = "mars")
+h3_mars@area_km2 / hex_grid(resolution = 5, type = "h3")@area_km2
+
+# H3 measures against the WGS84 authalic radius, so that is what divides out
+(3389.5 / 6371.007180918475)^2
 
 ## ----sf-workflow--------------------------------------------------------------
 # Hexify some data
@@ -286,7 +337,7 @@ ggplot() +
   geom_sf(data = cell_polys, fill = "steelblue", alpha = 0.5, color = "darkblue") +
   coord_sf(xlim = c(-10, 25), ylim = c(35, 58)) +
   labs(title = "European Cities - Hexagonal Grid") +
-  theme_minimal()
+  theme_minimal(base_size = FIG_BASE_SIZE)
 
 ## ----export-formats, eval=FALSE-----------------------------------------------
 # # Generate a grid

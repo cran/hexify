@@ -49,9 +49,10 @@ constexpr double kRadToDeg = 57.29577951308232087679815481410517033;  // 180/pi
 // ISEA Projection Constants
 // =============================================================================
 
-// Aperture 7 rotation angle: arctan(sqrt(3/7)) in degrees
-// Exact: atan(sqrt(3/7)) = 19.10660535003926...°
-constexpr double kAp7RotDeg = 19.10660535003926406149339781619697490;
+// Aperture 7 rotation angle: arctan(sqrt(3)/5) in degrees
+// Exact: atan(sqrt(3)/5) = 19.10660535086909...°
+// Cross-checked against DGGRID's M_AP7_ROT_DEGS (src/lib/dglib/include/dglib/DgConstants.h)
+constexpr double kAp7RotDeg = 19.106605350869094394517474740130082234976075229;
 
 // =============================================================================
 // Snyder Projection Sector Angles
@@ -127,6 +128,25 @@ constexpr PlaneTriLayout kPlaneLayout[20] = {
     {3, 4.5, kSin60},        // face 18
     {3, 5.5, kSin60}         // face 19
 };
+
+// =============================================================================
+// Grid Bounds
+// =============================================================================
+// Mirrors R/constants.R's MIN_RESOLUTION/MAX_RESOLUTION. Resolutions outside
+// this range are rejected before they can reach shift-overflow or
+// scale-to-infinity arithmetic in the grid-dimension calculations.
+
+constexpr int kMinResolution = 0;
+constexpr int kMaxResolution = 30;
+
+// Valid range for a quad index (12 quads: 0 = north pole, 1-10 = equatorial
+// belt, 11 = south pole)
+constexpr int kMinQuad = 0;
+constexpr int kMaxQuad = 11;
+
+// Valid range for an icosahedron triangle face index
+constexpr int kMinFace = 0;
+constexpr int kMaxFace = 19;
 
 // =============================================================================
 // Numerical Precision Constants

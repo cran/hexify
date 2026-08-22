@@ -18,7 +18,7 @@
 #'
 #' @return A list with 'dggridR'-compatible fields:
 #'   \item{pole_lon_deg}{Longitude of grid pole (default 11.25)}
-#'   \item{pole_lat_deg}{Latitude of grid pole (default 58.28252559)}
+#'   \item{pole_lat_deg}{Latitude of grid pole (default 58.282525588538995)}
 #'   \item{azimuth_deg}{Grid azimuth rotation (default 0)}
 #'   \item{aperture}{Grid aperture (3, 4, or 7)}
 #'   \item{res}{Resolution level}
@@ -29,6 +29,16 @@
 #' @family 'dggridR' compatibility
 #' @export
 as_dggrid <- function(grid) {
+
+  # Accept the modern HexGridInfo (S4) object by converting to the legacy
+  # list representation this function builds from, matching dgverify()'s
+  # fix (#7) for the same gap.
+  if (is_hex_grid(grid)) {
+    if (grid@grid_type == "h3") {
+      stop("as_dggrid() has no dggridR-compatible representation for H3 grids")
+    }
+    grid <- HexGridInfo_to_hexify_grid(grid)
+  }
 
   if (!inherits(grid, "hexify_grid")) {
     stop("grid must be a hexify_grid object from hexify_grid()")
@@ -45,7 +55,7 @@ as_dggrid <- function(grid) {
     precision = 7L
   )
 
-  class(dggs) <- "list"
+  class(dggs) <- c("dggs", "list")
   dggs
 }
 
@@ -107,9 +117,12 @@ from_dggrid <- function(dggs) {
     warning("Non-default azimuth_deg not supported. Using standard ISEA orientation.")
   }
 
-  # Create hexify_grid
+  # Create hexify_grid. `area` is a throwaway placeholder -- both `resolution`
+  # and `area` are overwritten below from `dggs$res` directly, but
+  # hexify_grid() requires a valid positive area (see #43) to construct the
+  # object at all.
   hexify_grid(
-    area = NA,  # Will be calculated from resolution if needed
+    area = 1000,
     topology = "HEXAGON",
     metric = TRUE,
     resround = "nearest",
@@ -118,12 +131,13 @@ from_dggrid <- function(dggs) {
   ) -> grid
 
   # Override resolution to match dggridR exactly
+  validate_resolution(dggs$res)
   grid$resolution <- as.integer(dggs$res)
   grid$res <- as.integer(dggs$res)
 
   # Calculate actual area for this resolution
-  n_cells <- 10 * (grid$aperture ^ grid$resolution) + 2
-  grid$area <- EARTH_SURFACE_KM2 / n_cells
+  n_cells <- max_cell_id(grid$resolution, grid$aperture)
+  grid$area <- body_surface_km2(grid_radius_km(grid)) / n_cells
 
   grid
 }

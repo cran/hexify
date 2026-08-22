@@ -12,15 +12,18 @@ parameters needed for grid operations.
 Create HexGridInfo objects using the \code{\link{hex_grid}} constructor function.
 Do not use \code{new("HexGridInfo", ...)} directly.
 
-The aperture can be "3", "4", "7" for standard grids, or "4/3" for mixed
-aperture grids that start with aperture 4 and switch to aperture 3.
+The aperture can be "3", "4", "7" for grids that refine by one aperture at
+every level; a family name such as "4/3" or "4/7", which refines by the first
+aperture for the first floor(resolution / 2) levels and by the second for the
+rest; or one aperture per level, "4/4/7/3".
 
 For H3 grids, the aperture is fixed at "7" and resolution ranges from 0 to 15.
 }
 \section{Slots}{
 
 \describe{
-\item{\code{aperture}}{Character. Grid aperture: "3", "4", "7", or "4/3" for mixed.}
+\item{\code{aperture}}{Character. Grid aperture: "3", "4", "7", a mixed family such
+as "4/3" or "4/7", or one aperture per resolution level ("4/4/7/3").}
 
 \item{\code{resolution}}{Integer. Grid resolution level (0-30 for ISEA, 0-15 for H3).}
 
@@ -28,9 +31,14 @@ For H3 grids, the aperture is fixed at "7" and resolution ranges from 0 to 15.
 
 \item{\code{diagonal_km}}{Numeric. Cell diagonal (long diagonal) in kilometers.}
 
-\item{\code{crs}}{Integer. Coordinate reference system (default 4326 = 'WGS84').}
+\item{\code{crs}}{Integer or character. Coordinate reference system: an EPSG code,
+or a 'PROJ' or 'WKT' string. Defaults to 'WGS84' on Earth, and to a longlat
+CRS on the sphere of \code{radius_km} on any other body.}
 
 \item{\code{grid_type}}{Character. Grid system: "isea" (default) or "h3".}
+
+\item{\code{radius_km}}{Numeric. Radius of the body the grid covers, in kilometers.
+\code{NA} reads as Earth's mean radius.}
 }}
 
 \seealso{

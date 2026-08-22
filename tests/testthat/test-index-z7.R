@@ -1,7 +1,7 @@
 
 # test-index_z7.R
 # Tests for Z7 encoding/decoding
-# Updated to match DGGRID's exact behavior for aperture 7
+# Tests for hexify's bijective aperture-7 index.
 
 library(testthat)
 
@@ -103,23 +103,18 @@ test_that("Z7: Pentagon rotation behavior follows DGGRID", {
   # Exact result depends on DGGRID implementation
 })
 
-test_that("Z7: Multi-digit indices match DGGRID behavior", {
-  # Test multi-digit indices match DGGRID's exact behavior
-  # Some indices don't round-trip due to aperture 7 cross-face remapping
+test_that("Z7: Multi-digit indices round-trip", {
   
   test_cases <- list(
-    # Most round-trip correctly
     list(idx = "0111111", expected = "0111111"),
-    # This one may transform based on your test output
-    list(idx = "0222222", expected = "0316106"),  # Updated based on actual behavior
+    list(idx = "0222222", expected = "0222222"),
     list(idx = "0333333", expected = "0333333"),
     list(idx = "0400000", expected = "0400000"),
     list(idx = "0511111", expected = "0511111"),
     list(idx = "0622222", expected = "0622222"),
     list(idx = "0733333", expected = "0733333"),
     list(idx = "0844444", expected = "0844444"),
-    # This one doesn't round-trip - rotates 5s to 1s
-    list(idx = "0955555", expected = "0911111"),
+    list(idx = "0955555", expected = "0955555"),
     list(idx = "1066666", expected = "1066666")
   )
   
@@ -128,7 +123,7 @@ test_that("Z7: Multi-digit indices match DGGRID behavior", {
     idx2 <- hexify_cell_to_index(result$face, result$i, result$j,
                          result$resolution, 7L, "z7")
     expect_equal(idx2, tc$expected,
-                 info = sprintf("Index %s should encode to %s (DGGRID behavior)", 
+                 info = sprintf("Index %s should round-trip to %s",
                                tc$idx, tc$expected))
   }
 })
@@ -157,19 +152,12 @@ test_that("Z7: Parent-child relationships work", {
                      as.integer(parent_result$resolution) + 1L,
                      info = sprintf("Child %s resolution check", child_idx))
         
-        # Re-encoding child may not give same index due to DGGRID behavior
+        # Every child has a unique, stable index.
         child_idx2 <- hexify_cell_to_index(child_result$face, child_result$i,
                                     child_result$j, child_result$resolution, 7L, "z7")
         
-        # For specific known cases, check expected behavior
-        if (child_idx == "012") {
-          expect_equal(child_idx2, "016",
-                       info = "Child 012 should re-encode to 016 (DGGRID behavior)")
-        } else if (child_idx == "022") {
-          expect_equal(child_idx2, "026", 
-                       info = "Child 022 should re-encode to 026 (DGGRID behavior)")
-        }
-        # Most other children should round-trip correctly
+        expect_equal(child_idx2, child_idx,
+                     info = sprintf("Child %s should round-trip", child_idx))
       }
     }
   }
@@ -190,78 +178,46 @@ test_that("Z7: Edge cases are handled correctly", {
   # Empty string should fail
   expect_error(hexify_index_to_cell("", 7L, "z7"))
   
-  # Negative coordinates should work (they get transformed)
+  # Arbitrary integer coordinates should round-trip without crashing.
   idx_neg <- hexify_cell_to_index(5L, -1L, -1L, 1L, 7L, "z7")
   result_neg <- hexify_index_to_cell(idx_neg, 7L, "z7")
-  expect_true(result_neg$i >= 0L || result_neg$j >= 0L,
-              info = "Negative coords should be handled")
+  expect_equal(c(result_neg$i, result_neg$j), c(-1, -1),
+               info = "Negative coords should round-trip")
 })
 
 test_that("Z7: Resolution progression works correctly", {
-  # Test that resolution scaling works (factor of 7 per level)
-  
-  # Start at resolution 1 with simple coordinates
-  idx_r1 <- hexify_cell_to_index(5L, 1L, 1L, 1L, 7L, "z7")
-  
-  # At resolution 2, same cell center should be at (7, 7)
-  idx_r2 <- hexify_cell_to_index(5L, 7L, 7L, 2L, 7L, "z7")
-  
-  # At resolution 3, same cell center should be at (49, 49)
-  idx_r3 <- hexify_cell_to_index(5L, 49L, 49L, 3L, 7L, "z7")
-  
-  # These indices represent the same logical cell at different resolutions
-  # Their string representations will be different lengths
-  expect_equal(nchar(idx_r1), 2L + 1L)  # Face + 1 digit
-  expect_equal(nchar(idx_r2), 2L + 2L)  # Face + 2 digits
-  expect_equal(nchar(idx_r3), 2L + 3L)  # Face + 3 digits
+  # The cells covering one point, at three resolutions: the index carries the
+  # two-digit leading field and one digit per level.
+  for (res in 1:3) {
+    cell <- hexify_lonlat_to_cell(10, 45, res, 7L)
+    qij <- hexify_cell_to_quad_ij(cell, res, 7L)
+    idx <- hexify_cell_to_index(qij$quad, qij$i, qij$j, res, 7L, "z7")
+    expect_equal(nchar(idx), 2L + res)
+  }
 })
 
-test_that("Z7: Known problem indices behave as expected", {
-  # Test specific indices that we know don't round-trip
-  # These are not bugs but expected behavior for aperture 7
-  
-  # Face 1 with digit 2 should re-encode to digit 6 after remapping
-  result <- hexify_index_to_cell("012", 7L, "z7")
-  re_encoded <- hexify_cell_to_index(result$face, result$i, result$j, 
-                              result$resolution, 7L, "z7")
-  expect_equal(re_encoded, "016",
-               info = "012 should re-encode to 016 (DGGRID behavior)")
-  
-  # The 110001 cycle - each re-encodes to the next in cycle
-  cycle_test <- list(
-    list(idx = "110001", expected = "110002"),
-    list(idx = "110002", expected = "110004"),
-    list(idx = "110004", expected = "110006"),
-    list(idx = "110006", expected = "110001")  # Completes cycle
-  )
-  
-  for (tc in cycle_test) {
-    result <- hexify_index_to_cell(tc$idx, 7L, "z7")
+test_that("Z7: a coordinate outside its quad is rejected", {
+  # (49, 49) at resolution 3 lies outside quad 5's substrate box, so no cell of
+  # that quad carries it and the hierarchy walk leaves the quad's own base cell.
+  expect_error(hexify_cell_to_index(5L, 49L, 49L, 3L, 7L, "z7"),
+               "does not lie in the given quad")
+})
+
+test_that("Z7: Former DGGRID problem indices are stable", {
+  problem_indices <- c("012", "110001", "110002", "110004", "110006")
+
+  for (idx in problem_indices) {
+    result <- hexify_index_to_cell(idx, 7L, "z7")
     re_encoded <- hexify_cell_to_index(result$face, result$i, result$j,
                                 result$resolution, 7L, "z7")
-    expect_equal(re_encoded, tc$expected,
-                 info = sprintf("%s should re-encode to %s (part of cycle)", 
-                               tc$idx, tc$expected))
+    expect_equal(re_encoded, idx,
+                 info = sprintf("%s should round-trip", idx))
   }
 })
 
 test_that("Z7: Canonical forms provide stability", {
-  # Test canonical forms - provides stable unique identifiers for cells
-
-  # The 110001 cycle - all should have same canonical form
-  cycle_indices <- c("110001", "110002", "110004", "110006")
-  canonicals <- vapply(cycle_indices, hexify_z7_canonical, character(1))
-  expect_true(all(canonicals == "110001"),
-              info = "All cycle members should canonicalize to 110001")
-
-  # Test other known transformations
-  expect_equal(hexify_z7_canonical("012"), "016",
-               info = "012 should canonicalize to 016")
-  expect_equal(hexify_z7_canonical("0955555"), "0911111",
-               info = "0955555 should canonicalize to 0911111")
-
-  # Canonical forms should be stable
-  for (idx in c("110001", "016", "0911111")) {
+  for (idx in c("012", "110001", "110002", "110004", "110006", "0955555")) {
+    expect_equal(hexify_z7_canonical(idx), idx)
     canonical <- hexify_z7_canonical(idx)
     result <- hexify_index_to_cell(canonical, 7L, "z7")
     re_encoded <- hexify_cell_to_index(result$face, result$i, result$j,
@@ -269,5 +225,45 @@ test_that("Z7: Canonical forms provide stability", {
     canonical2 <- hexify_z7_canonical(re_encoded)
     expect_equal(canonical2, canonical,
                  info = sprintf("Canonical form of %s should be stable", idx))
+  }
+})
+
+test_that("Z7: every cell round-trips through its index (#53)", {
+  set.seed(53)
+  for (res in 1:5) {
+    n_cells <- 10 * 7^res + 2
+    ids <- if (n_cells <= 600) seq_len(n_cells) else sample.int(n_cells, 600)
+
+    qij <- hexify_cell_to_quad_ij(ids, res, 7L)
+    idx <- vapply(seq_along(ids), function(k) {
+      hexify_cell_to_index(qij$quad[k], qij$i[k], qij$j[k], res, 7L, "z7")
+    }, character(1))
+
+    back <- vapply(idx, function(s) {
+      r <- hexify_index_to_cell(s, 7L, "z7")
+      hexify_quad_ij_to_cell(r$face, r$i, r$j, r$resolution, 7L)
+    }, numeric(1), USE.NAMES = FALSE)
+
+    expect_equal(back, as.numeric(ids),
+                 info = sprintf("resolution %d round-trip", res))
+    expect_equal(length(unique(idx)), length(idx),
+                 info = sprintf("resolution %d indices are distinct", res))
+    expect_true(all(nchar(idx) == 2L + res),
+                info = sprintf("resolution %d index length", res))
+  }
+})
+
+test_that("Z7: the two cells DGGRID's encoder merges keep distinct indices (#53)", {
+  # DgZ7StringRF sends both of these to "0045310"; they are distinct cells in
+  # distinct quads, so a bijective index has to separate them.
+  for (res in c(5, 6)) {
+    cells <- hexify_lonlat_to_cell(c(5, -34.9), c(45, 60.2), res, 7L)
+    qij <- hexify_cell_to_quad_ij(cells, res, 7L)
+    idx <- vapply(1:2, function(k) {
+      hexify_cell_to_index(qij$quad[k], qij$i[k], qij$j[k], res, 7L, "z7")
+    }, character(1))
+
+    expect_false(cells[1] == cells[2])
+    expect_false(idx[1] == idx[2])
   }
 })

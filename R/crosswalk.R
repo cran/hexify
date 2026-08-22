@@ -17,10 +17,12 @@
 #' @param grid A HexGridInfo or HexData object. For \code{direction =
 #'   "isea_to_h3"}, this must be an ISEA grid. For \code{direction =
 #'   "h3_to_isea"}, this must be an H3 grid.
-#' @param h3_resolution Target H3 resolution for \code{"isea_to_h3"}, or the
-#'   source H3 resolution for \code{"h3_to_isea"}. When \code{NULL} (default),
-#'   the closest H3 resolution matching the ISEA cell area is selected
-#'   automatically.
+#' @param h3_resolution Target H3 resolution for \code{"isea_to_h3"}. When
+#'   \code{NULL} (default), the closest H3 resolution matching the ISEA cell
+#'   area is selected automatically. For \code{"h3_to_isea"}, the source H3
+#'   resolution is always inferred from \code{grid}; if \code{h3_resolution}
+#'   is supplied for that direction it is validated against \code{grid}'s
+#'   resolution rather than used to select one.
 #' @param isea_grid A HexGridInfo for the target ISEA grid. Required when
 #'   \code{direction = "h3_to_isea"}.
 #' @param direction One of \code{"isea_to_h3"} (default) or \code{"h3_to_isea"}.
@@ -102,6 +104,12 @@ h3_crosswalk <- function(cell_id = NULL,
     if (is_h3_grid(isea_g)) {
       stop("isea_grid must be an ISEA grid, not H3")
     }
+    if (grid_radius_km(isea_g) != grid_radius_km(g)) {
+      stop(sprintf(
+        "Both grids must cover the same body: 'grid' has radius %s km, 'isea_grid' %s km",
+        format(grid_radius_km(g)), format(grid_radius_km(isea_g))
+      ))
+    }
   }
 
   # -------------------------------------------------------------------------
@@ -115,7 +123,7 @@ h3_crosswalk <- function(cell_id = NULL,
   if (direction == "isea_to_h3") {
     # Auto-select H3 resolution if not provided
     if (is.null(h3_resolution)) {
-      h3_resolution <- closest_h3_resolution(g@area_km2)
+      h3_resolution <- closest_h3_resolution(g@area_km2, grid_radius_km(g))
     } else {
       h3_resolution <- as.integer(h3_resolution)
       if (h3_resolution < H3_MIN_RESOLUTION || h3_resolution > H3_MAX_RESOLUTION) {
@@ -132,7 +140,7 @@ h3_crosswalk <- function(cell_id = NULL,
 
     # Compute areas
     isea_areas <- rep(g@area_km2, length(unique_ids))
-    h3_areas <- cpp_h3_cellAreaKm2(h3_ids)
+    h3_areas <- scale_area_to_body(cpp_h3_cellAreaKm2(h3_ids), grid_radius_km(g))
 
     data.frame(
       isea_cell_id = unique_ids,
@@ -148,6 +156,18 @@ h3_crosswalk <- function(cell_id = NULL,
     # H3 -> ISEA
     # -----------------------------------------------------------------------
 
+    # h3_resolution isn't used to select anything here (the source resolution
+    # is always g@resolution) but if supplied, it must agree with the grid.
+    if (!is.null(h3_resolution)) {
+      h3_resolution <- as.integer(h3_resolution)
+      if (h3_resolution != g@resolution) {
+        stop(sprintf(
+          "h3_resolution (%d) does not match the resolution of 'grid' (%d); h3_to_isea always infers the source resolution from 'grid'",
+          h3_resolution, g@resolution
+        ))
+      }
+    }
+
     # Get H3 cell centers
     center_df <- cpp_h3_cellToLatLng(as.character(unique_ids))
 
@@ -155,7 +175,8 @@ h3_crosswalk <- function(cell_id = NULL,
     isea_ids <- lonlat_to_cell(center_df$lon, center_df$lat, isea_g)
 
     # Compute areas
-    h3_areas <- cpp_h3_cellAreaKm2(as.character(unique_ids))
+    h3_areas <- scale_area_to_body(cpp_h3_cellAreaKm2(as.character(unique_ids)),
+                                   grid_radius_km(g))
     isea_areas <- rep(isea_g@area_km2, length(unique_ids))
 
     data.frame(

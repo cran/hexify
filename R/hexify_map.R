@@ -325,6 +325,12 @@ prepare_fill_column <- function(hex_sf, value, breaks, labels) {
   value_data <- hex_sf[[value]]
   is_discrete <- is.factor(value_data) || is.character(value_data)
 
+  if (!is.null(breaks) && is_discrete) {
+    warning(sprintf(
+      "'breaks' is ignored because '%s' is discrete (factor/character)", value
+    ))
+  }
+
   if (is.null(breaks) || is_discrete) {
     return(list(data = hex_sf, fill_col = value, is_discrete = is_discrete))
   }
@@ -447,7 +453,10 @@ plot_world <- function(fill = "gray90", border = "gray50", ...) {
 #'     \item \code{NULL}: No basemap (default)
 #'     \item \code{"world"}: Use built-in \code{hexify_world} map (low resolution)
 #'     \item \code{"world_hires"}: Use high-resolution map from rnaturalearth (requires package)
-#'     \item An sf object: User-supplied vector map
+#'     \item An sf object: User-supplied vector map, from any format
+#'       \code{sf::st_read()} reads, such as a shapefile, 'GeoJSON' or 'GeoPackage'
+#'     \item A SpatRaster: User-supplied raster, from any format
+#'       \code{terra::rast()} reads, such as a 'GeoTIFF', drawn in grayscale
 #'   }
 #' @param crs Target CRS for the map projection. Can be:
 #'   \itemize{
@@ -594,13 +603,15 @@ hexify_heatmap <- function(data,
   # Resolve value column (NULL means uniform fill)
   value <- resolve_value_column(hex_sf, value, require = FALSE)
 
-  # Setup CRS
-  crs <- if (is.null(crs)) 4326 else crs
+  # Setup CRS: a map with no projection asked for stays on the grid's own body
   if (is.na(sf::st_crs(hex_sf))) sf::st_crs(hex_sf) <- 4326
+  crs <- if (is.null(crs)) sf::st_crs(hex_sf) else crs
   hex_sf <- sf::st_transform(hex_sf, crs)
 
-  # Resolve and transform basemap
-  basemap_sf <- resolve_basemap(basemap)
+  # Resolve and transform basemap (supports sf and SpatRaster)
+  basemap_info <- resolve_basemap_with_raster(basemap)
+  basemap_sf <- basemap_info$sf
+  basemap_raster <- basemap_info$raster
   if (!is.null(basemap_sf)) {
     basemap_sf <- sf::st_transform(basemap_sf, crs)
   }
@@ -631,6 +642,35 @@ hexify_heatmap <- function(data,
 
   # Build ggplot with layers
   p <- ggplot2::ggplot()
+
+  # Add raster basemap if provided (rendered as grayscale annotation)
+  if (!is.null(basemap_raster)) {
+    if (requireNamespace("terra", quietly = TRUE)) {
+      rast_proj <- terra::project(basemap_raster, parse_crs(crs)$wkt)
+      ext <- as.vector(terra::ext(rast_proj))
+      # Convert to matrix for annotation_raster
+      vals <- terra::values(rast_proj[[1]])
+      nr <- terra::nrow(rast_proj)
+      nc <- terra::ncol(rast_proj)
+      # Normalize to grayscale
+      vmin <- min(vals, na.rm = TRUE)
+      vmax <- max(vals, na.rm = TRUE)
+      if (vmax > vmin) {
+        gray_vals <- (vals - vmin) / (vmax - vmin)
+      } else {
+        gray_vals <- rep(0.5, length(vals))
+      }
+      gray_vals[is.na(gray_vals)] <- 1
+      gray_mat <- matrix(grDevices::gray(gray_vals), nrow = nr, ncol = nc,
+                          byrow = TRUE)
+      p <- p + ggplot2::annotation_raster(
+        gray_mat,
+        xmin = ext[1], xmax = ext[2],
+        ymin = ext[3], ymax = ext[4]
+      )
+    }
+  }
+
   if (mask_outside && !is.null(basemap_sf)) {
     p <- build_masked_layers(
       p, hex_sf, fill_col, hex_border, hex_lwd, hex_alpha,
@@ -667,9 +707,8 @@ hexify_heatmap <- function(data,
 
   # Apply theme
   if (theme_void) {
-    p <- p + ggplot2::theme_minimal() +
+    p <- p + .theme_clean() +
       ggplot2::theme(
-        panel.grid = ggplot2::element_blank(),
         axis.text = ggplot2::element_blank(),
         axis.title = ggplot2::element_blank(),
         axis.ticks = ggplot2::element_blank()

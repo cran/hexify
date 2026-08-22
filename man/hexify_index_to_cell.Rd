@@ -18,26 +18,33 @@ hexify_index_to_cell(
 \item{index_type}{Index encoding used. Default "auto" infers from aperture.}
 }
 \value{
-List with face, i, j, and resolution
+A list with \code{face}, \code{i}, \code{j}, and \code{resolution}.
 }
 \description{
-Decodes a hierarchical index string back to cell coordinates.
+Decodes a hierarchical index string back to its cell coordinates and
+resolution. For Z7, valid indices round-trip exactly through
+\code{\link[=hexify_cell_to_index]{hexify_cell_to_index()}}.
 }
 \examples{
 cell <- hexify_index_to_cell("0012012", aperture = 3)
+
+z7_cell <- hexify_index_to_cell("110001", aperture = 7)
+hexify_cell_to_index(z7_cell$face, z7_cell$i, z7_cell$j,
+  z7_cell$resolution, aperture = 7
+)
 }
 \seealso{
-Other hierarchical index: 
-\code{\link{hexify_cell_to_index}()},
-\code{\link{hexify_compare_indices}()},
-\code{\link{hexify_default_index_type}()},
-\code{\link{hexify_get_children}()},
-\code{\link{hexify_get_parent}()},
-\code{\link{hexify_get_resolution}()},
-\code{\link{hexify_index_to_lonlat}()},
-\code{\link{hexify_is_valid_index_type}()},
-\code{\link{hexify_lonlat_to_index}()},
-\code{\link{hexify_z7_canonical}()}
+Other hierarchical index:
+\code{\link[=hexify_cell_to_index]{hexify_cell_to_index()}},
+\code{\link[=hexify_compare_indices]{hexify_compare_indices()}},
+\code{\link[=hexify_default_index_type]{hexify_default_index_type()}},
+\code{\link[=hexify_get_children]{hexify_get_children()}},
+\code{\link[=hexify_get_parent]{hexify_get_parent()}},
+\code{\link[=hexify_get_resolution]{hexify_get_resolution()}},
+\code{\link[=hexify_index_to_lonlat]{hexify_index_to_lonlat()}},
+\code{\link[=hexify_is_valid_index_type]{hexify_is_valid_index_type()}},
+\code{\link[=hexify_lonlat_to_index]{hexify_lonlat_to_index()}},
+\code{\link[=hexify_z7_canonical]{hexify_z7_canonical()}}
 }
 \concept{hierarchical index}
 \keyword{internal}

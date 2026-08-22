@@ -41,6 +41,9 @@
 #ifndef HEXIFY_COORDINATE_TRANSFORMS_H
 #define HEXIFY_COORDINATE_TRANSFORMS_H
 
+#include <vector>
+#include <cstdint>
+
 namespace hexify {
 
 // Convert from icosahedral triangle coordinates to quad XY coordinates
@@ -94,6 +97,73 @@ long long get_max_ij(int aperture, int resolution);
 // Returns true if coord was on edge and was adjusted
 bool handle_edge_overflow(int& quad, long long& i, long long& j,
                           int aperture, int resolution);
+
+// Aperture 7: Class I substrate scale for a resolution (7^numClassI,
+// numClassI = (resolution + 1) / 2) -- the scale the exact integer surrogate
+// is quantized at and that z7::encode/decode expect.
+long long ap7_classI_scale(int resolution);
+
+// Aperture 7: exact-integer conversion between the Class I substrate IJK (what
+// z7 operates on) and the resolution-r surrogate IJK (hexify's stored cell
+// coordinate). Even resolutions are the identity; odd resolutions apply one
+// exact aperture-7 level (upAp7r / downAp7r).
+void ap7_substrate_to_surrogate_ijk(long long sub_i, long long sub_j, int resolution,
+                                    long long& sur_i, long long& sur_j);
+void ap7_surrogate_to_substrate_ijk(long long sur_i, long long sur_j, int resolution,
+                                    long long& sub_i, long long& sub_j);
+
+// Aperture 7: dense cell index within a quad, and its inverse.
+//
+// A quad owns exactly 7^resolution aperture-7 cells: those whose centre falls in
+// the half-open Class I substrate box [0, S)^2, S = ap7_classI_scale(). Even
+// resolutions store that centre directly, so the index is its row-major position
+// in the box. Odd resolutions store the coarsened surrogate, whose centre is a
+// point of the aperture-7 sublattice {(u, v) : 2u + v = 0 (mod 7)}; each row
+// therefore holds S/7 centres and the index counts those.
+//
+// The result spans [0, 7^resolution) with no gaps, so cell IDs run 1 ..
+// 10 * 7^resolution + 2 exactly as they do for apertures 3 and 4.
+uint64_t ap7_surrogate_to_quad_index(long long sur_i, long long sur_j, int resolution);
+void ap7_quad_index_to_surrogate(uint64_t index, int resolution,
+                                 long long& sur_i, long long& sur_j);
+
+// Aperture 7: does this surrogate's centre lie in the given quad, i.e. inside
+// the substrate box [0, S)^2?
+bool ap7_surrogate_in_quad(long long sur_i, long long sur_j, int resolution);
+
+// Re-express an (i, j) that has stepped outside its quad in the quad that owns
+// it, via DGGRID's edge table. Coordinates are the aperture's own cell
+// coordinate (the aperture-7 surrogate is expanded and coarsened around the
+// call). Returns false when the coordinate lands outside every adjacent quad,
+// which happens where the icosahedron folds at a vertex.
+bool quad_ij_canonicalize(int& quad, long long& i, long long& j,
+                          int aperture, int resolution);
+
+// Aperture 7: Inverse - surrogate IJ back to quad XY coordinates.
+void surrogate_ij_to_quad_xy_ap7(long long sur_i, long long sur_j, int resolution,
+                                  double& out_quad_x, double& out_quad_y);
+
+// Mixed aperture sequence: quad XY -> quad IJ.
+// ap_seq gives the aperture of every resolution level (see aperture_sequence.h):
+// entry 0 names the base grid, entries 1.. are the refinement steps, and
+// apertures 3, 4 and 7 may appear in any order. Scale and lattice orientation
+// both come from hex_form_sequence(), so the returned (i,j) are on the grid's
+// own mixed-radix substrate. Unlike icosa_tri_to_quad_ij(), which takes a
+// single pure aperture, this covers ISEA43H and any other ordering.
+void quad_xy_to_ij_mixed(int quad, double quad_x, double quad_y,
+                         const std::vector<int>& ap_seq,
+                         int& out_quad, long long& out_i, long long& out_j);
+
+// Mixed aperture sequence: quad IJ -> quad XY (inverse of
+// quad_xy_to_ij_mixed()).
+void quad_ij_to_xy_mixed(int quad, long long i, long long j,
+                         const std::vector<int>& ap_seq,
+                         double& out_quad_x, double& out_quad_y);
+
+// Substrate coordinate of a quad's far edge for a mixed sequence: the total
+// scale sqrt(product of apertures * lattice norm), which is also the number of
+// substrate cells along a quad edge.
+long long quad_edge_coord_mixed(const std::vector<int>& ap_seq);
 
 } // namespace hexify
 

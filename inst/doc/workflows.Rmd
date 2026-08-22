@@ -8,22 +8,17 @@ vignette: >
 ---
 
 ```{r setup, include = FALSE}
-knitr::opts_chunk$set(
-  collapse = TRUE,
-  comment = "#>",
-  fig.width = 7,
-  fig.height = 5
-)
+source("_common.R")
 library(hexify)
 library(sf)
 library(ggplot2)
 ```
 
-This vignette covers practical workflows for common spatial analysis tasks: sharing grids across datasets, generating grid polygons, choosing resolution, and exporting to GIS formats.
+Shared grids across datasets, polygon generation, resolution selection, and GIS export.
 
 ## One Grid, Many Datasets
 
-The most powerful pattern in hexify is defining a grid once and reusing it across multiple datasets. This ensures spatial consistency and eliminates parameter repetition.
+Define a grid once, reuse it everywhere. Same grid object = guaranteed spatial alignment across datasets.
 
 ### The Problem
 
@@ -151,14 +146,14 @@ ggplot() +
   geom_sf(data = europe_hexes, fill = NA, color = "steelblue", linewidth = 0.4) +
   coord_sf(xlim = c(-10, 25), ylim = c(35, 60)) +
   labs(title = sprintf("Hexagonal Grid (~%.0f km² cells)", grid@area_km2)) +
-  theme_minimal()
+  theme_minimal(base_size = FIG_BASE_SIZE)
 ```
 
 ### Grid Over a Polygon (Shapefile)
 
 Clip a grid to any sf polygon boundary:
 
-```{r grid-polygon, fig.width=6, fig.height=6}
+```{r grid-polygon, fig.width=7, fig.height=7}
 # Get France boundary
 france <- hexify_world[hexify_world$name == "France", ]
 
@@ -174,13 +169,14 @@ ggplot() +
   geom_sf(data = france_grid_clipped, fill = alpha("steelblue", 0.3),
           color = "steelblue", linewidth = 0.3) +
   coord_sf(xlim = c(-5, 10), ylim = c(41, 52)) +
-  labs(title = sprintf("Hexagonal Grid Clipped to France (~%.0f km² cells)", grid@area_km2)) +
-  theme_minimal()
+  labs(title = "Hexagonal Grid Clipped to France",
+       subtitle = sprintf("~%.0f km² cells", grid@area_km2)) +
+  theme_minimal(base_size = FIG_BASE_SIZE)
 ```
 
 ### Global Grid
 
-```{r grid-global, fig.width=8, fig.height=4, warning=FALSE}
+```{r grid-global, fig.width=7, fig.height=3.5, warning=FALSE}
 # Coarse global grid (be careful with fine grids - many cells!)
 grid <- hex_grid(area_km2 = 500000)
 global_hexes <- grid_global(grid)
@@ -189,7 +185,7 @@ ggplot() +
   geom_sf(data = hexify_world, fill = "gray90", color = "gray70", linewidth = 0.2) +
   geom_sf(data = global_hexes, fill = NA, color = "darkgreen", linewidth = 0.3) +
   labs(title = sprintf("Global Hexagonal Grid (~%.0f km² cells)", grid@area_km2)) +
-  theme_minimal() +
+  theme_minimal(base_size = FIG_BASE_SIZE) +
   theme(axis.text = element_blank(), axis.ticks = element_blank())
 ```
 
@@ -288,6 +284,25 @@ city_weather <- merge(
 city_weather
 ```
 
+## Cell-Level Aggregation and Neighbors
+
+`hex_summarize()` aggregates data per cell without manually splitting and
+merging, and `get_neighbors()` finds the ring of cells surrounding a given
+cell — useful for smoothing, spatial lag features, or checking what
+surrounds a hotspot.
+
+```{r cell-summarize}
+# Aggregate the station data straight from the HexData object
+hex_summarize(stations_hex, mean_temp = mean(temperature), n_stations = length(temperature))
+```
+
+```{r cell-neighbors}
+# The 6 cells surrounding a given cell (k = 1), or a wider ring with k > 1
+some_cell <- stations_hex@cell_id[1]
+get_neighbors(some_cell, grid)
+get_neighbors(some_cell, grid, k = 2)
+```
+
 ## Choosing Resolution
 
 ### By Target Area
@@ -322,10 +337,20 @@ comparison$n_cells_fmt <- ifelse(
          sprintf("%.1fK", comparison$n_cells / 1e3),
          as.character(comparison$n_cells))
 )
+comparison$area_fmt <- ifelse(
+  comparison$cell_area_km2 < 0.1,
+  formatC(comparison$cell_area_km2, format = "e", digits = 1),
+  formatC(comparison$cell_area_km2, format = "f", digits = 1, big.mark = ",")
+)
+comparison$spacing_fmt <- ifelse(
+  comparison$cell_spacing_km < 0.1,
+  formatC(comparison$cell_spacing_km, format = "e", digits = 1),
+  formatC(comparison$cell_spacing_km, format = "f", digits = 1)
+)
 knitr::kable(
-  comparison[, c("resolution", "n_cells_fmt", "cell_area_km2", "cell_spacing_km")],
-  col.names = c("Resolution", "# Cells", "Cell Area (km²)", "Spacing (km)"),
-  digits = 1
+  comparison[, c("resolution", "n_cells_fmt", "area_fmt", "spacing_fmt")],
+  col.names = c("Resolution", "# Cells", "Cell Area (km\u00b2)", "Spacing (km)"),
+  align = c("r", "r", "r", "r")
 )
 ```
 
@@ -352,6 +377,93 @@ for (ap in c(3, 4, 7)) {
 | 4 | Power-of-2 scaling, GIS workflows | Moderate resolution steps |
 | 7 | Rapid cell count growth, coarse analysis | Largest resolution jumps |
 | 4/3 | Balance of 4's fast start + 3's fine control | More complex indexing |
+
+## Grids on Other Bodies
+
+A grid partitions a sphere, and `radius_km` sets which sphere. Pass a radius in
+kilometres or the name of a body:
+
+```{r other-bodies}
+mars <- hex_grid(area_km2 = 1000, radius_km = "mars")
+mars
+
+# The same grid, by radius
+identical(mars@area_km2, hex_grid(resolution = mars@resolution, radius_km = 3389.5)@area_km2)
+```
+
+Cell geometry is angular: which cell a coordinate falls in, where centres and
+corners sit, the parent-child hierarchy and the neighbours are the same on
+every body. The radius sets the kilometre figures — cell area, diagonal,
+spacing, and the resolution that a target `area_km2` picks.
+
+```{r other-bodies-geometry}
+earth <- hex_grid(resolution = 5)
+moon  <- hex_grid(resolution = 5, radius_km = "moon")
+
+lon <- c(0, 16.37, -70.5)
+lat <- c(0, 48.21, -33.4)
+
+identical(lonlat_to_cell(lon, lat, moon), lonlat_to_cell(lon, lat, earth))
+c(earth = earth@area_km2, moon = moon@area_km2)
+```
+
+Areas come from the sphere of that radius, `4 * pi * r^2`; Earth keeps the
+WGS84 ellipsoid area. Named bodies carry the IAU mean radii (Archinal et al.
+2018) tabulated by JPL Solar System Dynamics: `mercury`, `venus`, `earth`,
+`moon`, `mars`, `ceres`, `jupiter`, `io`, `europa`, `ganymede`, `callisto`,
+`saturn`, `enceladus`, `titan`, `uranus`, `neptune`, `pluto`.
+
+`radius_km` reaches every function that reports kilometres, because the grid
+object carries it: `dgearthstat()`, `cell_area()`, `hexify_compare_resolutions()`
+and the sf exports all read the grid's radius.
+
+### Coordinates on another body
+
+EPSG codes name Earth reference systems, so a grid built on another radius
+carries a longlat CRS on the sphere of that radius:
+
+```{r other-bodies-crs}
+mars@crs
+```
+
+Every sf object built from that grid carries it, so cells, centres and hexified
+data come back in the body's own coordinates. A planet of your own works the
+same way through a radius in kilometres:
+
+```{r other-bodies-crs-custom}
+world <- hex_grid(area_km2 = 5000, radius_km = 4200)
+world@crs
+```
+
+`crs` also takes a value of your own, as an EPSG code or a PROJ or WKT string,
+which is how a projected system for the body reaches the grid:
+
+```{r other-bodies-crs-explicit}
+hex_grid(area_km2 = 5000, radius_km = 4200,
+         crs = "+proj=laea +lat_0=0 +lon_0=0 +R=4200000 +no_defs")@crs
+```
+
+A basemap for such a body is any file sf or terra reads: `sf::st_read()` takes a
+shapefile, GeoJSON or GeoPackage of coastlines, `terra::rast()` takes a GeoTIFF.
+Both go to `hexify_heatmap(basemap = )`.
+
+Both backends take a radius. H3 reports a cell's area as its solid angle times
+Earth's radius squared, so another radius scales those areas by the square of
+the radius ratio:
+
+```{r other-bodies-h3}
+h3_mars <- hex_grid(resolution = 5, type = "h3", radius_km = "mars")
+h3_mars@area_km2 / hex_grid(resolution = 5, type = "h3")@area_km2
+
+# H3 measures against the WGS84 authalic radius, so that is what divides out
+(3389.5 / 6371.007180918475)^2
+```
+
+One caveat rides along with H3. A cell ID names a position in H3's topology,
+which Uber's H3 reads on Earth. A grid on another body reuses that topology and
+its own radius for areas, so its IDs are that topology on that body, not
+interchangeable with Earth H3 data. `h3_crosswalk()` needs both grids on the
+same body for the same reason.
 
 ## Working with sf
 
@@ -385,7 +497,7 @@ ggplot() +
   geom_sf(data = cell_polys, fill = "steelblue", alpha = 0.5, color = "darkblue") +
   coord_sf(xlim = c(-10, 25), ylim = c(35, 58)) +
   labs(title = "European Cities - Hexagonal Grid") +
-  theme_minimal()
+  theme_minimal(base_size = FIG_BASE_SIZE)
 ```
 
 ## Export to GIS Formats
@@ -448,6 +560,14 @@ projections render correctly without manual intervention.
 | Global grid | `grid_global(grid)` |
 | Coordinate conversion | `lonlat_to_cell()`, `cell_to_lonlat()` |
 | Compare resolutions | `hexify_compare_resolutions()` |
+| Aggregate data per cell | `hex_summarize(result, ...)` |
+| Find neighboring cells | `get_neighbors(cell_id, grid, k = ...)` |
+| Merge/split multi-resolution cells | `hex_compact()`, `hex_uncompact()` |
+| Distance between cells | `hex_distance(cell_id1, cell_id2, grid)` |
+| Extract raster values at cell centers | `hex_extract(raster, grid)` |
+| Zonal statistics over cell polygons | `hex_zonal(raster, grid)` |
+| Map ISEA cells to H3 (or vice versa) | `h3_crosswalk()` |
+| Per-cell area | `cell_area(cell_ids, grid)` |
 
 ## See Also
 

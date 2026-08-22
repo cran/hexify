@@ -12,14 +12,18 @@
 #'
 #' @param data A data.frame or sf object containing coordinates
 #' @param grid A HexGridInfo object from \code{hex_grid()}. If provided, overrides
-#'   area_km2, resolution, and aperture parameters.
+#'   area_km2, resolution, aperture and radius_km parameters.
 #' @param lon Column name for longitude (ignored if data is sf)
 #' @param lat Column name for latitude (ignored if data is sf)
 #' @param area_km2 Target cell area in km^2 (mutually exclusive with diagonal).
 #' @param diagonal Target cell diagonal (long diagonal) in km
 #' @param resolution Grid resolution (0-30). Alternative to area_km2.
-#' @param aperture Grid aperture: 3, 4, 7, or "4/3" for mixed (default 3)
+#' @param aperture Grid aperture: 3, 4, 7, a mixed family such as "4/3" or
+#'   "4/7", or one aperture per resolution level, e.g. \code{c(4, 4, 7, 3)}
+#'   (default 3)
 #' @param resround How to round resolution: "nearest", "up", or "down"
+#' @param radius_km Radius of the body the grid covers, in kilometers, or a body
+#'   name such as "mars" (default Earth). See \code{\link{hex_grid}}.
 #'
 #' @return A HexData object containing:
 #'   \itemize{
@@ -38,7 +42,7 @@
 #' For sf objects, coordinates are automatically extracted and transformed to
 #' 'WGS84' (EPSG:4326) if needed. The geometry column is preserved.
 #'
-#' Either \code{area_km2} (or \code{area}), \code{diagonal}, or \code{resolution}
+#' Either \code{area_km2}, \code{diagonal}, or \code{resolution}
 #' must be provided unless a \code{grid} object is supplied.
 #'
 #' The HexData return type (default) stores the grid specification so downstream
@@ -96,7 +100,8 @@ hexify <- function(data,
                    diagonal = NULL,
                    resolution = NULL,
                    aperture = 3,
-                   resround = "nearest") {
+                   resround = "nearest",
+                   radius_km = EARTH_RADIUS_KM) {
 
   # -------------------------------------------------------------------------
   # Extract or build grid specification
@@ -130,7 +135,8 @@ hexify <- function(data,
       area_km2 = area_km2,
       resolution = resolution,
       aperture = aperture,
-      resround = resround
+      resround = resround,
+      radius_km = radius_km
     )
   }
 
@@ -138,24 +144,27 @@ hexify <- function(data,
   # Extract coordinates from data
   # -------------------------------------------------------------------------
   is_sf <- inherits(data, "sf")
-  mapping <- list()
 
   if (is_sf) {
     if (!requireNamespace("sf", quietly = TRUE)) {
       stop("Package 'sf' is required to process sf objects")
     }
 
-    # Get coordinates, transforming to WGS84 if needed
-    if (sf::st_crs(data)$epsg != 4326 && !is.na(sf::st_crs(data)$epsg)) {
-      coords_sf <- sf::st_transform(data, 4326)
-    } else {
+    # Get coordinates, transforming to WGS84 if needed. A missing CRS (not
+    # merely one without a mapped EPSG code) can't be transformed from, so
+    # treat it as already lon/lat rather than erroring; otherwise compare
+    # full CRS objects (not just $epsg, which is NA for many valid CRS built
+    # from WKT/proj4 strings) and transform when they differ.
+    data_crs <- sf::st_crs(data)
+    if (is.na(data_crs) || data_crs == sf::st_crs(4326)) {
       coords_sf <- data
+    } else {
+      coords_sf <- sf::st_transform(data, 4326)
     }
 
     coords <- sf::st_coordinates(coords_sf)
     lon_vec <- coords[, 1]
     lat_vec <- coords[, 2]
-    mapping$geometry <- attr(data, "sf_column")
   } else {
     # Regular data.frame
     if (!lon %in% names(data)) {
@@ -167,14 +176,14 @@ hexify <- function(data,
 
     lon_vec <- data[[lon]]
     lat_vec <- data[[lat]]
-    mapping$lon <- lon
-    mapping$lat <- lat
   }
 
   # Validate coordinates
   if (!is.numeric(lon_vec) || !is.numeric(lat_vec)) {
     stop("Coordinates must be numeric")
   }
+  validate_lon(lon_vec)
+  validate_lat(lat_vec)
 
   na_mask <- is.na(lon_vec) | is.na(lat_vec)
   if (all(na_mask)) {
@@ -183,6 +192,9 @@ hexify <- function(data,
   if (any(na_mask)) {
     warning(sprintf("%d coordinate pairs contain NA values and will be skipped",
                     sum(na_mask)))
+    data <- data[!na_mask, , drop = FALSE]
+    lon_vec <- lon_vec[!na_mask]
+    lat_vec <- lat_vec[!na_mask]
   }
 
   # -------------------------------------------------------------------------
@@ -196,12 +208,16 @@ hexify <- function(data,
     cell_ids <- cpp_h3_latLngToCell(lon_vec, lat_vec, res)
     center_df <- cpp_h3_cellToLatLng(cell_ids)
     centers <- list(lon_deg = center_df$lon, lat_deg = center_df$lat)
-  } else if (aperture_str == "4/3") {
-    level <- as.integer(res / 2)
-    cell_ids <- cpp_lonlat_to_cell_ap43(lon_vec, lat_vec, res, level)
-    centers <- cpp_cell_to_lonlat_ap43(cell_ids, res, level)
+  } else if (is_mixed_aperture(aperture_str)) {
+    ap_seq <- parse_aperture_seq(aperture_str, res)
+    cell_ids <- cpp_lonlat_to_cell_seq(lon_vec, lat_vec, ap_seq)
+    centers <- cpp_cell_to_lonlat_seq(cell_ids, ap_seq)
   } else {
-    aperture_num <- as.integer(aperture_str)
+    aperture_num <- match(aperture_str, c("3", "4", "7"))
+    if (is.na(aperture_num)) {
+      stop(sprintf("unexpected aperture value '%s' in grid object", aperture_str))
+    }
+    aperture_num <- c(3L, 4L, 7L)[aperture_num]
     cell_ids <- cpp_lonlat_to_cell(lon_vec, lat_vec, res, aperture_num)
     centers <- cpp_cell_to_lonlat(cell_ids, res, aperture_num)
   }

@@ -24,26 +24,30 @@ hexify_lonlat_to_index(
 \item{index_type}{Index encoding: "auto" (default), "z3", "z7", or "zorder"}
 }
 \value{
-Index string
+A character vector of index strings.
 }
 \description{
-Main entry point for geocoding points to grid cells.
+Projects geographic coordinates to grid cells and returns their hierarchical
+index strings. Inputs are vectorized over \code{lon} and \code{lat}.
 }
 \examples{
 idx <- hexify_lonlat_to_index(16.37, 48.21, resolution = 5, aperture = 3)
+idx7 <- hexify_lonlat_to_index(16.37, 48.21,
+  resolution = 4, aperture = 7
+)
 }
 \seealso{
-Other hierarchical index: 
-\code{\link{hexify_cell_to_index}()},
-\code{\link{hexify_compare_indices}()},
-\code{\link{hexify_default_index_type}()},
-\code{\link{hexify_get_children}()},
-\code{\link{hexify_get_parent}()},
-\code{\link{hexify_get_resolution}()},
-\code{\link{hexify_index_to_cell}()},
-\code{\link{hexify_index_to_lonlat}()},
-\code{\link{hexify_is_valid_index_type}()},
-\code{\link{hexify_z7_canonical}()}
+Other hierarchical index:
+\code{\link[=hexify_cell_to_index]{hexify_cell_to_index()}},
+\code{\link[=hexify_compare_indices]{hexify_compare_indices()}},
+\code{\link[=hexify_default_index_type]{hexify_default_index_type()}},
+\code{\link[=hexify_get_children]{hexify_get_children()}},
+\code{\link[=hexify_get_parent]{hexify_get_parent()}},
+\code{\link[=hexify_get_resolution]{hexify_get_resolution()}},
+\code{\link[=hexify_index_to_cell]{hexify_index_to_cell()}},
+\code{\link[=hexify_index_to_lonlat]{hexify_index_to_lonlat()}},
+\code{\link[=hexify_is_valid_index_type]{hexify_is_valid_index_type()}},
+\code{\link[=hexify_z7_canonical]{hexify_z7_canonical()}}
 }
 \concept{hierarchical index}
 \keyword{internal}

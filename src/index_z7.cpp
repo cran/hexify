@@ -80,11 +80,8 @@ std::string encode(int quadNum, long long i, long long j, int resolution) {
     
     // Allocate (res + 1) elements for digit storage
     // Index 0 unused; indices 1..res store the hierarchical path digits
-    IVec3D::Direction* digits = 
-        (IVec3D::Direction*) malloc((res + 1) * sizeof(IVec3D::Direction));
-    for (int r = 0; r < res + 1; r++) {
-        digits[r] = IVec3D::INVALID_DIGIT;
-    }
+    std::vector<IVec3D::Direction> digits_vec(res + 1, IVec3D::INVALID_DIGIT);
+    IVec3D::Direction* digits = digits_vec.data();
     
     bool first = true;
     for (int r = effectiveRes; r >= 0; r--) {
@@ -183,8 +180,6 @@ std::string encode(int quadNum, long long i, long long j, int resolution) {
         
         addstr += std::to_string((int)d);
     }
-    
-    free(digits);
     
     return addstr;
 }
@@ -371,6 +366,136 @@ void decode(const std::string& z7_index, int resolution,
     }
 }
 
+// ============================================================================
+// Bijective aperture-7 hierarchical index (hexify-native)
+// ============================================================================
+// DGGRID's DgZ7StringRF encode is non-injective near the pentagon base cells:
+// two geographically distinct cells can encode to one string (verified
+// reproducer: lon/lat (5,45) and (-34.9,60.2) both -> "0045310"), so a
+// bijective cell<->index round-trip is impossible with the faithful algorithm.
+//
+// These functions keep hexify's geographic quad fixed -- they reuse the exact
+// aperture-7 digit machinery (upAp7/downAp7 + diffVec) but drop DGGRID's
+// base-cell adjacency reassignment and pentagon digit-skip, the steps that
+// merge distinct cells. Every (quad, i, j) then maps to a unique string and
+// back. The string equals the DGGRID Z7 string for cells DGGRID does not
+// reassign, and deviates only for the pentagon-region cells where DGGRID's own
+// encoder collides. Input/output (i,j) are the Class I substrate coordinate
+// (the same convention encode()/decode() use).
+
+// The level-0 coordinate a walk arrives at. A cell whose whole ancestry lies
+// inside its quad arrives at the origin, and decoding from the origin recovers
+// it. The quad is a rhombus while the aperture-7 parents are hexagons, so the
+// quad boundary cuts through the parents of the cells along it; those arrive at
+// one of the six neighbours of the origin instead, which the walk alone does
+// not record. The arrival point is a unit digit, so the index carries it in its
+// leading field as quad + 12 * digit: two digits still, and the plain quad
+// DGGRID writes whenever the cell does not spill.
+static IVec3D z7_seed_coord(int digit) {
+    IVec3D ijk(0, 0, 0);
+    ijk.neighbor((IVec3D::Direction) digit);
+    return ijk;
+}
+
+// Walk the aperture-7 hierarchy from a Class I substrate coordinate up to
+// resolution 0, recording the child ordinal of each level in digits[1..res].
+// The return value is the coordinate the walk arrives at: the origin when every
+// ancestor of the cell lies in the same quad, and a neighbouring lattice point
+// when the quad's rhombic boundary cuts through one of them.
+static IVec3D z7_walk_up(long long i, long long j, int resolution,
+                         std::vector<IVec3D::Direction>& digits) {
+    IVec3D ijk(i, j, 0);
+    const bool isClassIII = (resolution % 2);
+    const int effectiveRes = isClassIII ? resolution + 1 : resolution;
+
+    digits.assign(resolution + 1, IVec3D::INVALID_DIGIT);
+
+    bool first = true;
+    for (int r = effectiveRes; r >= 1; r--) {
+        IVec3D lastIJK = ijk;
+        IVec3D lastCenter;
+        if (r % 2) {
+            ijk.upAp7();
+            lastCenter = ijk;
+            lastCenter.downAp7();
+        } else {
+            ijk.upAp7r();
+            lastCenter = ijk;
+            lastCenter.downAp7r();
+        }
+        if (first && isClassIII) {
+            first = false;
+            continue;
+        }
+        IVec3D diff = lastIJK.diffVec(lastCenter);
+        digits[r] = diff.unitIjkPlusToDigit();
+    }
+    return ijk;
+}
+
+std::string encode_bijective(int quadNum, long long i, long long j, int resolution) {
+    if (resolution == 0) {
+        std::ostringstream oss;
+        oss << std::setfill('0') << std::setw(2) << quadNum;
+        return oss.str();
+    }
+
+    std::vector<IVec3D::Direction> digits;
+    const IVec3D::Direction seed =
+        z7_walk_up(i, j, resolution, digits).unitIjkPlusToDigit();
+    if (seed >= IVec3D::NUM_DIGITS) {
+        throw std::runtime_error(
+            "Z7 encode: coordinate does not lie in the given quad");
+    }
+
+    std::ostringstream oss;
+    oss << std::setfill('0') << std::setw(2) << (quadNum + 12 * seed);
+    std::string out = oss.str();
+    for (int r = 1; r <= resolution; r++) {
+        out += std::to_string((int) digits[r]);
+    }
+    return out;
+}
+
+void decode_bijective(const std::string& index, int resolution,
+                      int& quadNum, long long& i, long long& j) {
+    if (index.length() < 2) {
+        throw std::runtime_error("Z7 index too short");
+    }
+    const int lead = std::stoi(index.substr(0, 2));
+    quadNum = lead % 12;
+    const int seed = lead / 12;
+    if (lead < 0 || seed >= IVec3D::NUM_DIGITS) {
+        throw std::runtime_error("Invalid base cell number");
+    }
+
+    std::string z7str = index.substr(2);
+    int res = (int) z7str.length();
+    if (res == 0) {
+        i = 0;
+        j = 0;
+        return;
+    }
+    if (res % 2) {
+        z7str += "0";
+        res++;
+    }
+
+    IVec3D ijk = z7_seed_coord(seed);
+    for (int r = 0; r < res; r++) {
+        if ((r + 1) % 2) {
+            ijk.downAp7();
+        } else {
+            ijk.downAp7r();
+        }
+        ijk.neighbor((IVec3D::Direction) (z7str.c_str()[r] - '0'));
+    }
+
+    IVec2D ij(ijk);
+    i = ij.i();
+    j = ij.j();
+}
+
 std::string canonical_form(const std::string& z7_index, int max_iterations) {
     // Handle resolution 0 (just base cell)
     if (z7_index.length() <= 2) {
@@ -396,8 +521,8 @@ std::string canonical_form(const std::string& z7_index, int max_iterations) {
         long long i, j;
         int res = current.length() - 2;
         
-        decode(current, res, quadNum, i, j);
-        std::string next = encode(quadNum, i, j, res);
+        decode_bijective(current, res, quadNum, i, j);
+        std::string next = encode_bijective(quadNum, i, j, res);
         
         // Check for fixed point
         if (next == current) {

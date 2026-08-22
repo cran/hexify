@@ -9,6 +9,8 @@
 #' @name hexify-conversions
 NULL
 
+# Validation: use validate_aperture() / validate_resolution() from constants.R
+
 #' Convert longitude/latitude to hexagonal cell hierarchical index
 #'
 #' Converts geographic coordinates (longitude, latitude) to hexagonal cell
@@ -87,9 +89,12 @@ hexify_lonlat_to_h_index <- function(grid, lon, lat) {
       grid$index_type
     )
     
-    # Extract face number from index (first 2 characters)
-    # Index format: "FF..." where FF is 2-digit face number
-    faces[i] <- as.integer(substr(cell_indices[i], 1, 2))
+    # The leading field of an index is not always the face on its own -- the
+    # aperture-7 Z7 index packs its hierarchy seed in there too -- so read the
+    # face back through the decoder that owns the format.
+    faces[i] <- as.integer(
+      cpp_index_to_cell(cell_indices[i], grid$aperture, grid$index_type)$face
+    )
   }
   
   return(data.frame(
@@ -235,55 +240,6 @@ hexify_grid_cell_to_lonlat <- function(grid, cell_id) {
 # INTERNAL HELPERS
 # =============================================================================
 
-#' Decode a cell index to face, i, j, and resolution
-#' 
-#' Internal function to decode a cell index string into its constituent
-#' components: face number, grid coordinates (i, j), and resolution level.
-#' 
-#' @param index Cell index string
-#' @param aperture Grid aperture (3, 4, or 7)
-#' @param index_type Index encoding type ("z3", "z7", or "zorder")
-#' 
-#' @return List with components:
-#'   \item{face}{Face number (integer)}
-#'   \item{i}{Grid coordinate i (integer)}
-#'   \item{j}{Grid coordinate j (integer)}
-#'   \item{resolution}{Resolution level (integer)}
-#'   
-#' @keywords internal
-index_to_cell_internal <- function(index, aperture, index_type) {
-  # Extract face from first 2 characters
-  face <- as.integer(substr(index, 1, 2))
-
-  # Extract the rest of the index
-  index_body <- substr(index, 3, nchar(index))
-
-  # Decode based on index type
-  if (index_type == "z3") {
-    # Z3 indexing for aperture 3
-    result <- cpp_decode_z3(index_body, aperture)
-  } else if (index_type == "z7") {
-    # Z7 indexing for aperture 7 - expects the FULL index string
-    result <- cpp_decode_z7(index, aperture)
-    # cpp_decode_z7 returns quad, but we already extracted face
-    return(list(
-      face = result$quad,
-      i = result$i,
-      j = result$j,
-      resolution = result$resolution
-    ))
-  } else {
-    # Z-order (Morton) indexing for aperture 4
-    result <- cpp_decode_zorder(index_body, aperture)
-  }
-
-  return(list(
-    face = face,
-    i = result$i,
-    j = result$j,
-    resolution = result$resolution
-  ))
-}
 
 #' Round-trip accuracy test
 #' 
@@ -314,7 +270,7 @@ hexify_roundtrip_test <- function(grid, lon, lat, units = "km") {
   # Calculate distance
   if (units == "km") {
     # Haversine distance
-    R <- EARTH_RADIUS_KM
+    R <- grid_radius_km(grid)
     dlat <- (coords$lat - lat) * pi / 180
     dlon <- (coords$lon - lon) * pi / 180
     lat_rad <- lat * pi / 180
@@ -388,12 +344,8 @@ hexify_roundtrip_test <- function(grid, lon, lat, units = "km") {
 #' print(result)
 hexify_lonlat_to_quad_ij <- function(lon, lat, resolution, aperture = 3L) {
 
-  if (!aperture %in% c(3L, 4L, 7L)) {
-    stop("aperture must be 3, 4, or 7")
-  }
-  if (resolution < 0 || resolution > 30) {
-    stop("resolution must be between 0 and 30")
-  }
+  validate_aperture(aperture)
+  validate_resolution(resolution)
 
   cpp_lonlat_to_quad_ij(
     lon_deg = as.numeric(lon),
@@ -426,12 +378,8 @@ hexify_lonlat_to_quad_ij <- function(lon, lat, resolution, aperture = 3L) {
 #' print(cell_id)
 hexify_quad_ij_to_cell <- function(quad, i, j, resolution, aperture = 3L) {
 
-  if (!aperture %in% c(3L, 4L, 7L)) {
-    stop("aperture must be 3, 4, or 7")
-  }
-  if (resolution < 0 || resolution > 30) {
-    stop("resolution must be between 0 and 30")
-  }
+  validate_aperture(aperture)
+  validate_resolution(resolution)
 
   cpp_quad_ij_to_cell(
     quad = as.integer(quad),
@@ -467,9 +415,7 @@ hexify_quad_ij_to_cell <- function(quad, i, j, resolution, aperture = 3L) {
 #' print(xy)
 hexify_quad_ij_to_xy <- function(quad, i, j, resolution, aperture = 3L) {
 
-  if (!aperture %in% c(3L, 4L, 7L)) {
-    stop("aperture must be 3, 4, or 7")
-  }
+  validate_aperture(aperture)
 
   cpp_quad_ij_to_xy(
     quad = as.integer(quad),
@@ -556,9 +502,7 @@ hexify_icosa_tri_to_quad_ij <- function(icosa_triangle_face,
                                          resolution,
                                          aperture = 3L) {
 
-  if (!aperture %in% c(3L, 4L, 7L)) {
-    stop("aperture must be 3, 4, or 7")
-  }
+  validate_aperture(aperture)
 
   cpp_icosa_tri_to_quad_ij(
     icosa_triangle_face = as.integer(icosa_triangle_face),
@@ -638,15 +582,7 @@ hexify_quad_xy_to_icosa_tri <- function(quad, quad_x, quad_y) {
 #'                                    resolution = 10, aperture = 3)
 #' # Should equal original cell_id
 hexify_cell_to_quad_ij <- function(cell_id, resolution, aperture = 3L) {
-
-  if (!aperture %in% c(3L, 4L, 7L)) {
-    stop("aperture must be 3, 4, or 7")
-  }
-  if (resolution < 0 || resolution > 30) {
-    stop("resolution must be between 0 and 30")
-  }
-
-  cpp_cell_to_quad_ij(
+  hexify_cell_id_to_quad_ij(
     cell_id = as.numeric(cell_id),
     resolution = as.integer(resolution),
     aperture = as.integer(aperture)
@@ -687,12 +623,8 @@ hexify_cell_to_quad_ij <- function(cell_id, resolution, aperture = 3L) {
 #'                          result$icosa_triangle_y)
 hexify_cell_to_icosa_tri <- function(cell_id, resolution, aperture = 3L) {
 
-  if (!aperture %in% c(3L, 4L, 7L)) {
-    stop("aperture must be 3, 4, or 7")
-  }
-  if (resolution < 0 || resolution > 30) {
-    stop("resolution must be between 0 and 30")
-  }
+  validate_aperture(aperture)
+  validate_resolution(resolution)
 
   cpp_cell_to_icosa_tri(
     cell_id = as.numeric(cell_id),
@@ -733,12 +665,8 @@ hexify_cell_to_icosa_tri <- function(cell_id, resolution, aperture = 3L) {
 #' print(result)
 hexify_quad_ij_to_icosa_tri <- function(quad, i, j, resolution, aperture = 3L) {
 
-  if (!aperture %in% c(3L, 4L, 7L)) {
-    stop("aperture must be 3, 4, or 7")
-  }
-  if (resolution < 0 || resolution > 30) {
-    stop("resolution must be between 0 and 30")
-  }
+  validate_aperture(aperture)
+  validate_resolution(resolution)
 
   cpp_quad_ij_to_icosa_tri(
     quad = as.integer(quad),
@@ -790,12 +718,8 @@ hexify_quad_ij_to_icosa_tri <- function(quad, i, j, resolution, aperture = 3L) {
 #' # Should equal original cell_id
 hexify_cell_to_quad_xy <- function(cell_id, resolution, aperture = 3L) {
 
-  if (!aperture %in% c(3L, 4L, 7L)) {
-    stop("aperture must be 3, 4, or 7")
-  }
-  if (resolution < 0 || resolution > 30) {
-    stop("resolution must be between 0 and 30")
-  }
+  validate_aperture(aperture)
+  validate_resolution(resolution)
 
   cpp_cell_to_quad_xy(
     cell_id = as.numeric(cell_id),
@@ -833,12 +757,8 @@ hexify_cell_to_quad_xy <- function(cell_id, resolution, aperture = 3L) {
 hexify_quad_xy_to_cell <- function(quad, quad_x, quad_y, resolution,
                                    aperture = 3L) {
 
-  if (!aperture %in% c(3L, 4L, 7L)) {
-    stop("aperture must be 3, 4, or 7")
-  }
-  if (resolution < 0 || resolution > 30) {
-    stop("resolution must be between 0 and 30")
-  }
+  validate_aperture(aperture)
+  validate_resolution(resolution)
 
   cpp_quad_xy_to_cell(
     quad = as.integer(quad),
@@ -938,12 +858,8 @@ hexify_icosa_tri_to_plane <- function(icosa_triangle_face,
 #' plot(plane$plane_x, plane$plane_y)
 hexify_cell_to_plane <- function(cell_id, resolution, aperture = 3L) {
 
-  if (!aperture %in% c(3L, 4L, 7L)) {
-    stop("aperture must be 3, 4, or 7")
-  }
-  if (resolution < 0 || resolution > 30) {
-    stop("resolution must be between 0 and 30")
-  }
+  validate_aperture(aperture)
+  validate_resolution(resolution)
 
   cpp_cell_to_plane(
     cell_id = as.numeric(cell_id),

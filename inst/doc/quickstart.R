@@ -1,13 +1,8 @@
 ## ----setup, include = FALSE---------------------------------------------------
-knitr::opts_chunk$set(
-  collapse = TRUE,
-  comment = "#>",
-  fig.width = 7,
-  fig.height = 5
-)
+source("_common.R")
 library(hexify)
 
-## ----cover-image, echo=FALSE, message=FALSE, warning=FALSE, fig.width=8, fig.height=4, fig.align='center'----
+## ----cover-image, echo=FALSE, message=FALSE, warning=FALSE, fig.width=7, fig.height=3.5, fig.align='center'----
 # Generate cover image: multi-resolution grids over different regions
 library(sf)
 library(ggplot2)
@@ -34,7 +29,7 @@ ggplot() +
   geom_sf(data = eu_hexes, fill = NA, color = "#D95F02", linewidth = 0.4) +
   geom_sf(data = asia_hexes, fill = NA, color = "#7570B3", linewidth = 0.3) +
   coord_sf(xlim = c(-100, 150), ylim = c(-50, 60)) +
-  theme_void() +
+  theme_void(base_size = FIG_BASE_SIZE) +
   theme(panel.background = element_rect(fill = "white", color = NA))
 
 ## ----basic-usage--------------------------------------------------------------
@@ -142,7 +137,7 @@ names(richness)[2] <- "n_species"
 obs_counts <- merge(obs_counts, richness, by = "cell_id")
 head(obs_counts)
 
-## ----bird-plot, fig.width=8, fig.height=6, message=FALSE, warning=FALSE-------
+## ----bird-plot, fig.width=7, fig.height=5.25, message=FALSE, warning=FALSE----
 # Generate polygons for cells with data
 cell_polys <- cell_to_sf(obs_counts$cell_id, grid)
 cell_polys <- merge(cell_polys, obs_counts, by = "cell_id")
@@ -156,18 +151,18 @@ ggplot() +
   scale_fill_viridis_c(option = "plasma", name = "Observations", trans = "sqrt") +
   coord_sf(xlim = c(-30, 60), ylim = c(-35, 70)) +
   labs(
-    title = "Bird Observations in Equal-Area Hexagonal Cells",
+    title = "Bird Observations in Equal-Area Cells",
     subtitle = sprintf("ISEA3H grid at resolution %d (~%.0f km² cells)",
                        grid@resolution, grid@area_km2)
   ) +
-  theme_minimal() +
+  theme_minimal(base_size = FIG_BASE_SIZE) +
   theme(
     axis.text = element_blank(),
     axis.ticks = element_blank(),
     panel.grid = element_line(color = "gray90")
   )
 
-## ----richness-plot, fig.width=8, fig.height=6, message=FALSE------------------
+## ----richness-plot, fig.width=7, fig.height=5.25, message=FALSE---------------
 ggplot() +
   geom_sf(data = region, fill = "gray95", color = "gray70", linewidth = 0.2) +
   geom_sf(data = cell_polys, aes(fill = n_species), color = "white", linewidth = 0.3) +
@@ -175,9 +170,9 @@ ggplot() +
   coord_sf(xlim = c(-30, 60), ylim = c(-35, 70)) +
   labs(
     title = "Species Richness per Grid Cell",
-    subtitle = "Number of unique species observed in each equal-area cell"
+    subtitle = "Unique species per equal-area cell"
   ) +
-  theme_minimal() +
+  theme_minimal(base_size = FIG_BASE_SIZE) +
   theme(
     axis.text = element_blank(),
     axis.ticks = element_blank(),

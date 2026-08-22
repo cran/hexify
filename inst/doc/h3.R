@@ -1,13 +1,8 @@
 ## ----setup, include = FALSE---------------------------------------------------
 CAN_RUN <- requireNamespace("sf", quietly = TRUE)
 
-knitr::opts_chunk$set(
-  collapse = TRUE,
-  comment = "#>",
-  fig.width = 7,
-  fig.height = 5,
-  eval = CAN_RUN
-)
+source("_common.R")
+knitr::opts_chunk$set(eval = CAN_RUN)
 library(hexify)
 
 ## ----h3-grid------------------------------------------------------------------
@@ -56,11 +51,11 @@ ggplot() +
   geom_sf(data = europe, fill = "gray95", color = "gray60") +
   geom_sf(data = europe_h3, fill = NA, color = "#E6550D", linewidth = 0.4) +
   coord_sf(xlim = c(-10, 25), ylim = c(35, 60)) +
-  labs(title = sprintf("H3 Resolution %d Grid (~%.0f km² avg cells)",
-                       grid_h3@resolution, grid_h3@area_km2)) +
-  theme_minimal()
+  labs(title = sprintf("H3 Resolution %d Grid", grid_h3@resolution),
+       subtitle = sprintf("~%.0f km² average cell", grid_h3@area_km2)) +
+  theme_minimal(base_size = FIG_BASE_SIZE)
 
-## ----h3-grid-clip, fig.width=6, fig.height=6----------------------------------
+## ----h3-grid-clip, fig.width=7, fig.height=7----------------------------------
 # Clip H3 grid to France
 france <- hexify_world[hexify_world$name == "France", ]
 grid_h3 <- hex_grid(resolution = 4, type = "h3")
@@ -72,7 +67,7 @@ ggplot() +
           color = "#E6550D", linewidth = 0.3) +
   coord_sf(xlim = c(-5, 10), ylim = c(41, 52)) +
   labs(title = sprintf("H3 Grid Clipped to France (res %d)", grid_h3@resolution)) +
-  theme_minimal()
+  theme_minimal(base_size = FIG_BASE_SIZE)
 
 ## ----h3-parent----------------------------------------------------------------
 # Get parent cells (one resolution coarser)
@@ -107,13 +102,12 @@ ggplot() +
   geom_sf(data = children_poly, fill = alpha("#E6550D", 0.3),
           color = "#E6550D", linewidth = 0.5) +
   geom_sf(data = parent_poly, fill = NA, color = "black", linewidth = 1.2) +
-  labs(title = sprintf("H3 Hierarchy: 1 parent (res %d) → %d children (res %d)",
-                       grid_coarse@resolution,
-                       length(children[[1]]),
-                       grid_fine@resolution)) +
-  theme_minimal()
+  labs(title = sprintf("H3 Hierarchy: 1 parent (res %d)", grid_coarse@resolution),
+       subtitle = sprintf("%d children (res %d)",
+                          length(children[[1]]), grid_fine@resolution)) +
+  theme_minimal(base_size = FIG_BASE_SIZE)
 
-## ----h3-workflow, fig.width=8, fig.height=6, message=FALSE, warning=FALSE-----
+## ----h3-workflow, fig.width=7, fig.height=5.25, message=FALSE, warning=FALSE----
 set.seed(42)
 
 # Simulate observations across Europe
@@ -151,7 +145,7 @@ ggplot() +
   labs(title = "Species Richness on H3 Grid",
        subtitle = sprintf("H3 resolution %d (~%.0f km² avg cells)",
                           grid_h3@resolution, grid_h3@area_km2)) +
-  theme_minimal() +
+  theme_minimal(base_size = FIG_BASE_SIZE) +
   theme(axis.text = element_blank(), axis.ticks = element_blank())
 
 ## ----h3-crosswalk-------------------------------------------------------------
@@ -178,9 +172,20 @@ h3_res$n_cells_fmt <- ifelse(
                 sprintf("%.1fK", h3_res$n_cells / 1e3),
                 as.character(h3_res$n_cells)))
 )
+# Use scientific notation for tiny areas, fixed for larger ones
+h3_res$area_fmt <- ifelse(
+  h3_res$cell_area_km2 < 0.1,
+  formatC(h3_res$cell_area_km2, format = "e", digits = 1),
+  formatC(h3_res$cell_area_km2, format = "f", digits = 1, big.mark = ",")
+)
+h3_res$spacing_fmt <- ifelse(
+  h3_res$cell_spacing_km < 0.1,
+  formatC(h3_res$cell_spacing_km, format = "e", digits = 1),
+  formatC(h3_res$cell_spacing_km, format = "f", digits = 1)
+)
 knitr::kable(
-  h3_res[, c("resolution", "n_cells_fmt", "cell_area_km2", "cell_spacing_km")],
-  col.names = c("Resolution", "# Cells", "Avg Area (km²)", "Spacing (km)"),
-  digits = 1
+  h3_res[, c("resolution", "n_cells_fmt", "area_fmt", "spacing_fmt")],
+  col.names = c("Resolution", "# Cells", "Avg Area (km\u00b2)", "Spacing (km)"),
+  align = c("r", "r", "r", "r")
 )
 

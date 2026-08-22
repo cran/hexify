@@ -94,10 +94,10 @@ test_that("max_cell_id returns correct number of cells", {
 })
 
 test_that("max_cell_id handles resolution 0", {
-  # Resolution 0 returns 20 (20 icosahedron faces)
-  expect_equal(max_cell_id(0, 3), 20)
-  expect_equal(max_cell_id(0, 4), 20)
-  expect_equal(max_cell_id(0, 7), 20)
+  # Resolution 0 returns 12 (10 * aperture^0 + 2 = 12 cells: 12 icosahedron vertices)
+  expect_equal(max_cell_id(0, 3), 12)
+  expect_equal(max_cell_id(0, 4), 12)
+  expect_equal(max_cell_id(0, 7), 12)
 })
 
 # =============================================================================
@@ -168,13 +168,11 @@ test_that("hexify_compare_resolutions values are monotonic", {
 # ADDITIONAL COVERAGE FOR HEXIFY_STATS
 # =============================================================================
 
-test_that("dgearthstat handles aperture 7 differently", {
+test_that("dgearthstat counts aperture 7 cells", {
   grid <- hexify_grid(area = 10000, aperture = 7)
   stats <- dgearthstat(grid)
 
-  # Aperture 7 uses 12 base faces
-  expected_cells <- 10 * (7 ^ stats$resolution) + 2
-  expect_equal(stats$n_cells, expected_cells)
+  expect_equal(stats$n_cells, 10 * 7^stats$resolution + 2)
 })
 
 test_that("dg_closest_res_to_area handles non-metric input", {

@@ -25,12 +25,23 @@
 #'     \item 8-10: neighborhood/block scale (FCC uses 8-9)
 #'     \item 11-15: building/sub-meter scale
 #'   }
-#' @param aperture Grid aperture: 3 (default), 4, 7, or "4/3" for mixed.
-#'   Ignored for H3 grids (fixed at 7).
+#' @param aperture Grid aperture: 3 (default), 4, 7, a mixed family such as
+#'   "4/3", "4/7" or "7/4", or one aperture per resolution level as a vector,
+#'   e.g. \code{c(4, 4, 7, 3)}. A family name refines by the first aperture for
+#'   the first \code{floor(resolution / 2)} levels and by the second for the
+#'   rest, which is how DGGRID arranges ISEA43H. A per-level vector needs
+#'   \code{resolution} rather than \code{area_km2}. Ignored for H3 grids (fixed
+#'   at 7).
 #' @param type Grid type: "isea" (default) or "h3".
 #' @param resround Resolution rounding when using \code{area_km2}:
 #'   "nearest" (default), "up", or "down".
-#' @param crs Coordinate reference system EPSG code (default 4326 = 'WGS84').
+#' @param crs Coordinate reference system: an EPSG code, or a 'PROJ' or 'WKT'
+#'   string. Defaults to 'WGS84' on Earth, and to a longlat CRS on the sphere of
+#'   \code{radius_km} on any other body, which has no EPSG code to name it.
+#' @param radius_km Radius of the body the grid covers, in kilometers, or the
+#'   name of a body: "mercury", "venus", "earth" (default), "moon", "mars",
+#'   "ceres", "jupiter", "io", "europa", "ganymede", "callisto", "saturn",
+#'   "enceladus", "titan", "uranus", "neptune", "pluto".
 #'
 #' @return A HexGridInfo object containing the grid specification.
 #'
@@ -44,6 +55,28 @@
 #' H3 grids use the Uber H3 hierarchical hexagonal system. Unlike ISEA grids,
 #' H3 cells are NOT exactly equal-area (area varies by ~3-5\% depending on
 #' location).
+#'
+#' @section Other Bodies:
+#'
+#' A grid is a partition of the sphere, and \code{radius_km} sets the sphere it
+#' is measured on. Cell geometry -- which cell a coordinate lands in, where cell
+#' centres and corners sit, the hierarchy, the neighbours -- is angular and
+#' identical on every body; the radius sets the kilometer figures: cell area,
+#' diagonal, spacing, and the resolution that \code{area_km2} picks. Earth's
+#' area comes from the 'WGS84' ellipsoid, every other radius gives the sphere
+#' area 4*pi*r^2.
+#'
+#' \preformatted{
+#' mars <- hex_grid(area_km2 = 1000, radius_km = "mars")
+#' hex_grid(resolution = 8, radius_km = 3389.5)   # the same grid
+#' }
+#'
+#' Both backends take a radius. 'H3' reports a cell's area as its solid angle
+#' times Earth's radius squared, so another radius scales those areas by the
+#' square of the radius ratio, exactly. One caveat carries: an 'H3' cell ID
+#' names a position in 'H3''s topology, which 'Uber''s 'H3' reads on Earth, so
+#' the IDs of a grid on another body are that topology on that body and are not
+#' interchangeable with Earth 'H3' data.
 #'
 #' @seealso \code{\link{hexify}} for assigning points to cells,
 #'   \code{\link{HexGridInfo-class}} for class documentation
@@ -96,6 +129,14 @@
 #' # Create mixed aperture grid
 #' grid43 <- hex_grid(area_km2 = 1000, aperture = "4/3")
 #'
+#' # Mix in aperture 7, either as a family or level by level
+#' grid47 <- hex_grid(area_km2 = 1000, aperture = "4/7")
+#' grid_seq <- hex_grid(resolution = 4, aperture = c(4, 4, 7, 3))
+#'
+#' # Grid on another body, by name or by radius
+#' mars <- hex_grid(area_km2 = 1000, radius_km = "mars")
+#' titan <- hex_grid(resolution = 6, radius_km = 2574.76)
+#'
 #' # Use grid in hexify
 #' df <- data.frame(lon = c(0, 10, 20), lat = c(45, 50, 55))
 #' result <- hexify(df, lon = "lon", lat = "lat", grid = grid)
@@ -104,9 +145,13 @@ hex_grid <- function(area_km2 = NULL,
                      aperture = 3,
                      type = c("isea", "h3"),
                      resround = "nearest",
-                     crs = 4326L) {
+                     crs = NULL,
+                     radius_km = EARTH_RADIUS_KM) {
 
   type <- match.arg(type)
+
+  radius_km <- resolve_radius_km(radius_km)
+  crs <- resolve_crs(crs, radius_km)
 
   # =========================================================================
   # H3 grid path
@@ -129,12 +174,15 @@ hex_grid <- function(area_km2 = NULL,
         stop("area_km2 must be a positive number")
       }
       # Find closest H3 resolution by area
-      resolution <- closest_h3_resolution(area_km2)
+      resolution <- closest_h3_resolution(area_km2, radius_km)
       warning(sprintf(
         "H3 cells are not exactly equal-area. Closest resolution %d has average area ~%.3f km^2 (requested %.3f km^2)",
-        resolution, H3_AVG_AREA_KM2[resolution + 1L], area_km2
+        resolution, h3_avg_area_km2(resolution, radius_km), area_km2
       ))
     } else {
+      if (!is.numeric(resolution) || length(resolution) != 1 || is.na(resolution)) {
+        stop("resolution must be a single non-NA number")
+      }
       resolution <- as.integer(resolution)
       if (resolution < H3_MIN_RESOLUTION || resolution > H3_MAX_RESOLUTION) {
         stop(sprintf("H3 resolution must be between %d and %d",
@@ -147,7 +195,19 @@ hex_grid <- function(area_km2 = NULL,
       )
     }
 
-    actual_area <- H3_AVG_AREA_KM2[resolution + 1L]
+    if (radius_km != EARTH_RADIUS_KM) {
+      rlang::inform(
+        paste0(
+          "H3 cell IDs name a position in H3's topology, which Uber's H3 reads ",
+          "on Earth. A grid on another body reuses that topology and its own ",
+          "radius for areas; the IDs are not interchangeable with Earth H3 data."
+        ),
+        .frequency = "once",
+        .frequency_id = "hexify_h3_other_body"
+      )
+    }
+
+    actual_area <- h3_avg_area_km2(resolution, radius_km)
     actual_diagonal <- sqrt(actual_area * 2 / sqrt(3))
 
     grid <- new("HexGridInfo",
@@ -155,8 +215,9 @@ hex_grid <- function(area_km2 = NULL,
                 resolution = as.integer(resolution),
                 area_km2 = as.numeric(actual_area),
                 diagonal_km = as.numeric(actual_diagonal),
-                crs = as.integer(crs),
-                grid_type = "h3")
+                crs = crs,
+                grid_type = "h3",
+                radius_km = radius_km)
     return(grid)
   }
 
@@ -165,16 +226,20 @@ hex_grid <- function(area_km2 = NULL,
   # =========================================================================
 
   # -------------------------------------------------------------------------
-  # Parse aperture (handle "4/3" mixed aperture)
+  # Parse aperture: a single aperture, a family such as "4/3", or one aperture
+  # per resolution level (see R/aperture_sequence.R)
   # -------------------------------------------------------------------------
-  aperture_str <- as.character(aperture)
+  if (length(aperture) > 1L && is.null(resolution)) {
+    stop("An aperture given per level needs 'resolution', not 'area_km2'")
+  }
+  aperture_str <- format_aperture(aperture, resolution)
 
-  if (aperture_str == "4/3") {
-    aperture_num <- 3L  # Base aperture for resolution calculation
+  if (is_mixed_aperture(aperture_str)) {
+    aperture_num <- NA_integer_
   } else if (aperture_str %in% c("3", "4", "7")) {
     aperture_num <- as.integer(aperture_str)
   } else {
-    stop("Aperture must be 3, 4, 7, or '4/3' for mixed aperture")
+    stop("Aperture must be 3, 4, 7, a family such as \"4/3\", or one aperture per level")
   }
 
   # -------------------------------------------------------------------------
@@ -195,11 +260,11 @@ hex_grid <- function(area_km2 = NULL,
       stop("area_km2 must be a positive number")
     }
 
-    # Cell count formula: N = 10 * aperture^res + 2
-    # Solving for res: res = log((N - 2) / 10) / log(aperture)
-    # where N = EARTH_SURFACE_KM2 / area_km2
-    n_cells <- EARTH_SURFACE_KM2 / area_km2
-    res_exact <- log((n_cells - 2) / 10) / log(aperture_num)
+    res_exact <- if (is_mixed_aperture(aperture_str)) {
+      calculate_resolution_for_area_mixed(area_km2, aperture_str, radius_km)
+    } else {
+      calculate_resolution_for_area(area_km2, aperture_num, radius_km)
+    }
 
     # Apply rounding
     resolution <- switch(resround,
@@ -212,6 +277,9 @@ hex_grid <- function(area_km2 = NULL,
     # Clamp to valid range
     resolution <- max(MIN_RESOLUTION, min(MAX_RESOLUTION, resolution))
   } else {
+    if (!is.numeric(resolution) || length(resolution) != 1 || is.na(resolution)) {
+      stop("resolution must be a single non-NA number")
+    }
     resolution <- as.integer(resolution)
     if (resolution < MIN_RESOLUTION || resolution > MAX_RESOLUTION) {
       stop(sprintf("Resolution must be between %d and %d",
@@ -222,13 +290,8 @@ hex_grid <- function(area_km2 = NULL,
   # -------------------------------------------------------------------------
   # Calculate actual area and diagonal for this resolution
   # -------------------------------------------------------------------------
-  if (aperture_str == "4/3") {
-    level <- as.integer(resolution / 2)
-    n_cells <- 10 * (4^level) * (3^(resolution - level)) + 2
-  } else {
-    n_cells <- 10 * (aperture_num^resolution) + 2
-  }
-  actual_area <- EARTH_SURFACE_KM2 / n_cells
+  n_cells <- aperture_n_cells(aperture_str, resolution)
+  actual_area <- body_surface_km2(radius_km) / n_cells
   actual_diagonal <- sqrt(actual_area * 2 / sqrt(3))
 
   # -------------------------------------------------------------------------
@@ -244,8 +307,9 @@ hex_grid <- function(area_km2 = NULL,
               resolution = as.integer(resolution),
               area_km2 = as.numeric(actual_area),
               diagonal_km = as.numeric(actual_diagonal),
-              crs = as.integer(crs),
-              grid_type = "isea")
+              crs = crs,
+              grid_type = "isea",
+              radius_km = radius_km)
 
   # Validation happens automatically via setValidity
   grid
@@ -391,7 +455,7 @@ as_sf.HexData <- function(x, geometry = c("point", "polygon"), ...) {
     sf::st_as_sf(
       df_with_coords,
       coords = c("cell_cen_lon", "cell_cen_lat"),
-      crs = grid@crs
+      crs = grid_crs(grid)
     )
 
   } else {
@@ -412,4 +476,32 @@ as_sf.HexData <- function(x, geometry = c("point", "polygon"), ...) {
 #' @export
 as_sf.default <- function(x, ...) {
   stop("as_sf() is not defined for objects of class ", class(x)[1])
+}
+
+#' Coordinate reference system of a grid
+#'
+#' Reads the CRS a grid's coordinates are in, as \code{sf::st_crs()} does for
+#' any spatial object. An Earth grid returns 'WGS84'; a grid built on another
+#' body returns a longlat CRS on the sphere of its radius.
+#'
+#' @param x A HexGridInfo or HexData object
+#' @param ... Passed on to \code{sf::st_crs()}
+#' @return An object of class \code{crs}, as \code{sf::st_crs()} returns:
+#'   a list carrying the reference system in 'PROJ' and 'WKT' form. It says how
+#'   to read the coordinates that the grid's cells, centres and sf exports come
+#'   back in.
+#'
+#' @importFrom sf st_crs
+#' @export
+#' @examples
+#' st_crs(hex_grid(resolution = 5))
+#' st_crs(hex_grid(resolution = 5, radius_km = "mars"))
+st_crs.HexGridInfo <- function(x, ...) {
+  grid_crs(x)
+}
+
+#' @rdname st_crs.HexGridInfo
+#' @export
+st_crs.HexData <- function(x, ...) {
+  grid_crs(x@grid)
 }

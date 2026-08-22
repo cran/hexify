@@ -12,7 +12,7 @@ as_dggrid(grid)
 \value{
 A list with 'dggridR'-compatible fields:
 \item{pole_lon_deg}{Longitude of grid pole (default 11.25)}
-\item{pole_lat_deg}{Latitude of grid pole (default 58.28252559)}
+\item{pole_lat_deg}{Latitude of grid pole (default 58.282525588538995)}
 \item{azimuth_deg}{Grid azimuth rotation (default 0)}
 \item{aperture}{Grid aperture (3, 4, or 7)}
 \item{res}{Resolution level}
@@ -26,9 +26,9 @@ The resulting object can be used with 'dggridR' functions that accept a dggs
 object.
 }
 \seealso{
-Other 'dggridR' compatibility: 
-\code{\link{dggrid_43h_sequence}()},
-\code{\link{dggrid_is_compatible}()},
-\code{\link{from_dggrid}()}
+Other 'dggridR' compatibility:
+\code{\link[=dggrid_43h_sequence]{dggrid_43h_sequence()}},
+\code{\link[=dggrid_is_compatible]{dggrid_is_compatible()}},
+\code{\link[=from_dggrid]{from_dggrid()}}
 }
 \concept{'dggridR' compatibility}

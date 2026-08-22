@@ -1,10 +1,5 @@
 ## ----setup, include = FALSE---------------------------------------------------
-knitr::opts_chunk$set(
-  collapse = TRUE,
-  comment = "#>",
-  fig.width = 7,
-  fig.height = 5
-)
+source("_common.R")
 library(hexify)
 library(sf)
 library(ggplot2)
@@ -54,7 +49,7 @@ plot(result,
      main = "Cities with Points")
 
 ## ----point-sizes, fig.width=7, fig.height=7-----------------------------------
-oldpar <- par(mfrow = c(2, 2))
+oldpar <- par(mfrow = c(2, 2), cex = 1, cex.main = 1)
 
 plot(result, show_points = TRUE, point_size = "small",
      point_color = "red", main = "small (~5%)")
@@ -94,7 +89,7 @@ hexify_heatmap(result, basemap = "world") +
     subtitle = "Assigned to ISEA hexagonal grid cells",
     caption = "Data: Sample cities"
   ) +
-  theme_minimal() +
+  theme_minimal(base_size = FIG_BASE_SIZE) +
   theme(
     plot.title = element_text(face = "bold", size = 14),
     panel.grid = element_blank()
@@ -107,7 +102,7 @@ city_points <- st_as_sf(cities, coords = c("lon", "lat"), crs = 4326)
 hexify_heatmap(result, basemap = "world", title = "Cities with Labels") +
   geom_sf(data = city_points, color = "red", size = 2) +
   geom_sf_text(data = city_points, aes(label = name),
-               nudge_y = 0.8, size = 3, color = "darkgray") +
+               nudge_y = 0.8, size = 5, color = "darkgray") +
   coord_sf(xlim = c(-5, 25), ylim = c(45, 55))
 
 ## ----heatmap-setup------------------------------------------------------------
@@ -124,14 +119,14 @@ obs_data <- data.frame(
 grid <- hex_grid(area_km2 = 10000)
 obs_hex <- hexify(obs_data, lon = "lon", lat = "lat", grid = grid)
 
-## ----heatmap-basic, fig.width=8, fig.height=6---------------------------------
+## ----heatmap-basic, fig.width=7, fig.height=5.25------------------------------
 hexify_heatmap(
   obs_hex,
   value = "count",
   title = "Observation Counts"
 )
 
-## ----heatmap-colors, fig.width=8, fig.height=6--------------------------------
+## ----heatmap-colors, fig.width=7, fig.height=5.25-----------------------------
 hexify_heatmap(
   obs_hex,
   value = "count",
@@ -139,7 +134,7 @@ hexify_heatmap(
   title = "Yellow-Orange-Red Palette"
 )
 
-## ----heatmap-palettes, fig.width=8, fig.height=4------------------------------
+## ----heatmap-palettes, fig.width=7, fig.height=3.5, eval = requireNamespace("gridExtra", quietly = TRUE)----
 p1 <- hexify_heatmap(obs_hex, value = "count", colors = "viridis",
                      title = "viridis", xlim = c(-20, 35), ylim = c(35, 65))
 p2 <- hexify_heatmap(obs_hex, value = "count", colors = "YlGnBu",
@@ -147,7 +142,7 @@ p2 <- hexify_heatmap(obs_hex, value = "count", colors = "YlGnBu",
 
 gridExtra::grid.arrange(p1, p2, ncol = 2)
 
-## ----heatmap-extent, fig.width=8, fig.height=6--------------------------------
+## ----heatmap-extent, fig.width=7, fig.height=5.25-----------------------------
 hexify_heatmap(
   obs_hex,
   value = "count",
@@ -157,7 +152,7 @@ hexify_heatmap(
   legend_title = "Count"
 )
 
-## ----heatmap-basemap, fig.width=8, fig.height=6-------------------------------
+## ----heatmap-basemap, fig.width=7, fig.height=5.25----------------------------
 # With world basemap (default)
 hexify_heatmap(
   obs_hex,
@@ -168,7 +163,7 @@ hexify_heatmap(
   title = "With World Basemap"
 )
 
-## ----heatmap-no-basemap, fig.width=8, fig.height=6----------------------------
+## ----heatmap-no-basemap, fig.width=7, fig.height=5.25-------------------------
 # Without basemap
 hexify_heatmap(
   obs_hex,
@@ -179,10 +174,10 @@ hexify_heatmap(
   title = "No Basemap"
 )
 
-## ----plot-world, fig.width=8, fig.height=4------------------------------------
+## ----plot-world, fig.width=7, fig.height=3.5----------------------------------
 plot_world(fill = "lightgray", border = "gray50")
 
-## ----plot-world-custom, fig.width=8, fig.height=4-----------------------------
+## ----plot-world-custom, fig.width=7, fig.height=3.5---------------------------
 plot_world(
   fill = "antiquewhite",
   border = "sienna",
@@ -190,7 +185,7 @@ plot_world(
   ylim = c(30, 70)
 )
 
-## ----pentagon-locations, fig.width=8, fig.height=4----------------------------
+## ----pentagon-locations, fig.width=7, fig.height=3.5--------------------------
 # Pentagon locations (icosahedron vertices in standard ISEA orientation)
 pentagon_coords <- data.frame(
   type = c("Pole", "Pole", rep("Vertex", 10)),
@@ -210,12 +205,12 @@ ggplot() +
           color = "purple", linewidth = 0.8) +
   labs(
     title = "Pentagon Cell Locations",
-    subtitle = "12 pentagonal cells at icosahedron vertices (area = 5/6 of hexagons)"
+    subtitle = "12 pentagonal cells at icosahedron vertices\n(area = 5/6 of hexagons)"
   ) +
-  theme_minimal() +
+  theme_minimal(base_size = FIG_BASE_SIZE) +
   theme(axis.text = element_blank(), axis.ticks = element_blank())
 
-## ----random-sample, fig.width=8, fig.height=4---------------------------------
+## ----random-sample, fig.width=7, fig.height=3.5-------------------------------
 # Grid parameters (coarse for faster build)
 grid <- hex_grid(area_km2 = 200000, aperture = 3)
 max_cell <- 10 * (3^grid@resolution) + 2
@@ -232,11 +227,12 @@ ggplot() +
   geom_sf(data = hexify_world, fill = "gray95", color = "gray70", linewidth = 0.2) +
   geom_sf(data = sample_polys, fill = alpha("forestgreen", 0.5),
           color = "darkgreen", linewidth = 0.4) +
-  labs(title = sprintf("Random Sample of %d Cells (~%.0f km2 each)", N, grid@area_km2)) +
-  theme_minimal() +
+  labs(title = sprintf("Random Sample of %d Cells", N),
+       subtitle = sprintf("~%.0f km2 each", grid@area_km2)) +
+  theme_minimal(base_size = FIG_BASE_SIZE) +
   theme(axis.text = element_blank(), axis.ticks = element_blank())
 
-## ----custom-viz, fig.width=8, fig.height=6------------------------------------
+## ----custom-viz, fig.width=7, fig.height=5.25---------------------------------
 # Create data with a numeric variable
 set.seed(456)
 stations <- data.frame(
@@ -274,7 +270,7 @@ ggplot() +
     title = "Mean Temperature by Grid Cell",
     subtitle = "Diverging color scale centered at 15°C"
   ) +
-  theme_minimal() +
+  theme_minimal(base_size = FIG_BASE_SIZE) +
   theme(
     axis.text = element_blank(),
     axis.ticks = element_blank(),

@@ -8,7 +8,8 @@ hexify_compare_resolutions(
   aperture = 3,
   res_range = 0:15,
   type = c("isea", "h3"),
-  print = FALSE
+  print = FALSE,
+  radius_km = EARTH_RADIUS_KM
 )
 }
 \arguments{
@@ -20,6 +21,9 @@ hexify_compare_resolutions(
 
 \item{print}{If TRUE, prints a formatted table to console. If FALSE (default),
 returns a data frame.}
+
+\item{radius_km}{Radius of the body, in kilometers, or a body name such as
+"mars" (default Earth). See \code{\link{hex_grid}}.}
 }
 \value{
 If print=FALSE: data frame with columns resolution, n_cells,
@@ -40,14 +44,17 @@ hexify_compare_resolutions(aperture = 3, res_range = 0:10, print = TRUE)
 
 # Find resolution with cells ~1000 km^2
 subset(comparison, cell_area_km2 > 900 & cell_area_km2 < 1100)
+
+# Resolutions on another body
+hexify_compare_resolutions(aperture = 3, res_range = 0:6, radius_km = "mars")
 }
 \seealso{
-Other grid statistics: 
-\code{\link{dg_closest_res_to_area}()},
-\code{\link{dgearthstat}()},
-\code{\link{hexify_area_to_eff_res}()},
-\code{\link{hexify_eff_res_to_area}()},
-\code{\link{hexify_eff_res_to_resolution}()},
-\code{\link{hexify_resolution_to_eff_res}()}
+Other grid statistics:
+\code{\link[=dg_closest_res_to_area]{dg_closest_res_to_area()}},
+\code{\link[=dgearthstat]{dgearthstat()}},
+\code{\link[=hexify_area_to_eff_res]{hexify_area_to_eff_res()}},
+\code{\link[=hexify_eff_res_to_area]{hexify_eff_res_to_area()}},
+\code{\link[=hexify_eff_res_to_resolution]{hexify_eff_res_to_resolution()}},
+\code{\link[=hexify_resolution_to_eff_res]{hexify_resolution_to_eff_res()}}
 }
 \concept{grid statistics}

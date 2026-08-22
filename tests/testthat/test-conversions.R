@@ -62,8 +62,8 @@ test_that("quad_ij_to_cell returns positive cell IDs", {
   cell_id <- hexify_quad_ij_to_cell(quad = 1, i = 100, j = 50,
                                      resolution = 10, aperture = 3)
 
-  expect_true(cell_id > 0)
   expect_true(is.numeric(cell_id))
+  expect_equal(cell_id, 24352)
 })
 
 test_that("quad_ij_to_cell is consistent with lonlat_to_cell", {
@@ -95,8 +95,8 @@ test_that("quad_ij_to_xy returns valid structure", {
 
   expect_true("quad_x" %in% names(result))
   expect_true("quad_y" %in% names(result))
-  expect_true(is.numeric(result$quad_x))
-  expect_true(is.numeric(result$quad_y))
+  expect_equal(result$quad_x, 0.30864197530864212, tolerance = 1e-12)
+  expect_equal(result$quad_y, 0.17819452752766235, tolerance = 1e-12)
 })
 
 # =============================================================================
@@ -197,6 +197,42 @@ test_that("quad_ij_to_icosa_tri returns valid structure", {
   expect_true(result$icosa_triangle_face >= 0 && result$icosa_triangle_face <= 19)
 })
 
+test_that("aperture-7 quad IJ -> XY lands on the cell centre", {
+  # quad_ij_to_xy() used to scale aperture-7 coordinates by a sqrt(7)/sqrt(21)
+  # substrate while the forward quantization used the exact 7^ceil(res/2) one,
+  # so anything reaching it without the aperture-7 guard landed in the wrong
+  # place (or outside the quad entirely).
+  hexify_build_icosa()
+
+  set.seed(57)
+  lon <- runif(40, -170, 170)
+  lat <- runif(40, -75, 75)
+
+  for (res in 0:5) {
+    g <- hex_grid(resolution = res, aperture = 7)
+    cells <- lonlat_to_cell(lon, lat, g)
+    ctr <- cell_to_lonlat(cells, g)
+    qij <- cpp_cell_to_quad_ij(cells, res, 7L)
+
+    # Polar quads are pentagons that cell_to_lonlat() answers directly.
+    keep <- which(qij$quad >= 1 & qij$quad <= 10 & !is.na(ctr$lon))
+    expect_gt(length(keep), 0)
+
+    for (k in keep) {
+      xy <- cpp_quad_ij_to_xy(qij$quad[k], qij$i[k], qij$j[k], 7L, res)
+      tri <- cpp_quad_xy_to_icosa_tri(qij$quad[k], xy$quad_x, xy$quad_y)
+      ll <- cpp_face_xy_to_ll(tri[["icosa_triangle_x"]],
+                              tri[["icosa_triangle_y"]],
+                              tri[["icosa_triangle_face"]])
+
+      expect_equal(as.numeric(ll[["lon"]]), ctr$lon[k], tolerance = 1e-9,
+                   info = sprintf("res=%d quad=%d", res, qij$quad[k]))
+      expect_equal(as.numeric(ll[["lat"]]), ctr$lat[k], tolerance = 1e-9,
+                   info = sprintf("res=%d quad=%d", res, qij$quad[k]))
+    }
+  }
+})
+
 # =============================================================================
 # PIPELINE CONSISTENCY
 # =============================================================================
@@ -255,7 +291,7 @@ test_that("all apertures have consistent coordinate pipeline", {
 test_that("hexify_lonlat_to_quad_ij validates aperture", {
   expect_error(
     hexify_lonlat_to_quad_ij(lon = 0, lat = 0, resolution = 5, aperture = 5),
-    "3, 4, or 7"
+    "3, 4, 7"
   )
 })
 
@@ -273,7 +309,7 @@ test_that("hexify_lonlat_to_quad_ij validates resolution", {
 test_that("hexify_quad_ij_to_cell validates aperture", {
   expect_error(
     hexify_quad_ij_to_cell(quad = 0, i = 1, j = 1, resolution = 5, aperture = 5),
-    "3, 4, or 7"
+    "3, 4, 7"
   )
 })
 
@@ -287,7 +323,7 @@ test_that("hexify_quad_ij_to_cell validates resolution", {
 test_that("hexify_quad_ij_to_xy validates aperture", {
   expect_error(
     hexify_quad_ij_to_xy(quad = 1, i = 10, j = 5, resolution = 5, aperture = 5),
-    "3, 4, or 7"
+    "3, 4, 7"
   )
 })
 
@@ -300,7 +336,7 @@ test_that("hexify_icosa_tri_to_quad_ij validates aperture", {
       resolution = 5,
       aperture = 5
     ),
-    "3, 4, or 7"
+    "3, 4, 7"
   )
 })
 
@@ -322,7 +358,7 @@ test_that("hexify_cell_to_quad_ij returns correct structure", {
 test_that("hexify_cell_to_quad_ij validates aperture", {
   expect_error(
     hexify_cell_to_quad_ij(cell_id = 100, resolution = 5, aperture = 5),
-    "3, 4, or 7"
+    "3, 4, 7"
   )
 })
 
@@ -351,7 +387,7 @@ test_that("hexify_cell_to_icosa_tri returns correct structure", {
 test_that("hexify_cell_to_icosa_tri validates aperture", {
   expect_error(
     hexify_cell_to_icosa_tri(cell_id = 100, resolution = 5, aperture = 5),
-    "3, 4, or 7"
+    "3, 4, 7"
   )
 })
 
@@ -367,7 +403,7 @@ test_that("hexify_quad_ij_to_icosa_tri validates aperture", {
     hexify_quad_ij_to_icosa_tri(
       quad = 1, i = 10, j = 5, resolution = 5, aperture = 5
     ),
-    "3, 4, or 7"
+    "3, 4, 7"
   )
 })
 
@@ -398,7 +434,7 @@ test_that("hexify_cell_to_quad_xy returns correct structure", {
 test_that("hexify_cell_to_quad_xy validates aperture", {
   expect_error(
     hexify_cell_to_quad_xy(cell_id = 100, resolution = 5, aperture = 5),
-    "3, 4, or 7"
+    "3, 4, 7"
   )
 })
 
@@ -418,7 +454,7 @@ test_that("hexify_quad_xy_to_cell returns valid cell ID", {
   )
 
   expect_true(is.numeric(cell_id))
-  expect_true(cell_id > 0)
+  expect_equal(cell_id, 167)
 })
 
 test_that("hexify_quad_xy_to_cell validates aperture", {
@@ -426,7 +462,7 @@ test_that("hexify_quad_xy_to_cell validates aperture", {
     hexify_quad_xy_to_cell(
       quad = 1, quad_x = 0.5, quad_y = 0.3, resolution = 5, aperture = 5
     ),
-    "3, 4, or 7"
+    "3, 4, 7"
   )
 })
 
@@ -487,7 +523,7 @@ test_that("hexify_cell_to_plane returns correct structure", {
 test_that("hexify_cell_to_plane validates aperture", {
   expect_error(
     hexify_cell_to_plane(cell_id = 100, resolution = 5, aperture = 5),
-    "3, 4, or 7"
+    "3, 4, 7"
   )
 })
 

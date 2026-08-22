@@ -13,14 +13,15 @@ hexify(
   diagonal = NULL,
   resolution = NULL,
   aperture = 3,
-  resround = "nearest"
+  resround = "nearest",
+  radius_km = EARTH_RADIUS_KM
 )
 }
 \arguments{
 \item{data}{A data.frame or sf object containing coordinates}
 
 \item{grid}{A HexGridInfo object from \code{hex_grid()}. If provided, overrides
-area_km2, resolution, and aperture parameters.}
+area_km2, resolution, aperture and radius_km parameters.}
 
 \item{lon}{Column name for longitude (ignored if data is sf)}
 
@@ -32,9 +33,14 @@ area_km2, resolution, and aperture parameters.}
 
 \item{resolution}{Grid resolution (0-30). Alternative to area_km2.}
 
-\item{aperture}{Grid aperture: 3, 4, 7, or "4/3" for mixed (default 3)}
+\item{aperture}{Grid aperture: 3, 4, 7, a mixed family such as "4/3" or
+"4/7", or one aperture per resolution level, e.g. \code{c(4, 4, 7, 3)}
+(default 3)}
 
 \item{resround}{How to round resolution: "nearest", "up", or "down"}
+
+\item{radius_km}{Radius of the body the grid covers, in kilometers, or a body
+name such as "mars" (default Earth). See \code{\link{hex_grid}}.}
 }
 \value{
 A HexData object containing:
@@ -60,7 +66,7 @@ in separate slots.
 For sf objects, coordinates are automatically extracted and transformed to
 'WGS84' (EPSG:4326) if needed. The geometry column is preserved.
 
-Either \code{area_km2} (or \code{area}), \code{diagonal}, or \code{resolution}
+Either \code{area_km2}, \code{diagonal}, or \code{resolution}
 must be provided unless a \code{grid} object is supplied.
 
 The HexData return type (default) stores the grid specification so downstream
@@ -113,7 +119,7 @@ result_mixed <- hexify(df, lon = "lon", lat = "lat", area_km2 = 1000, aperture =
 \code{\link{HexData-class}} for return object details,
 \code{\link{as_sf}} for converting to sf
 
-Other hexify main: 
-\code{\link{hexify_grid}()}
+Other hexify main:
+\code{\link[=hexify_grid]{hexify_grid()}}
 }
 \concept{hexify main}
