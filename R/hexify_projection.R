@@ -1,11 +1,14 @@
 # hexify_projection.R
-# ISEA Snyder Equal-Area Projection
+# Snyder's equal-area projection, the vertex-oriented equal-area one (IVEA),
+# and Fuller's, of a solid's faces
 #
 # This module handles all projection operations between geographic coordinates
-# (longitude/latitude) and the planar icosahedral faces.
+# (longitude/latitude) and the planar faces of the icosahedron, the octahedron
+# or the tetrahedron (Snyder 1992 defines the projection on each).
 #
-# Note: The C++ layer handles lazy initialization of the icosahedron via ico().
-# No R-level state management is needed.
+# The C++ layer builds each solid in each orientation once, when first read.
+# Functions that take no grid read the solid's default orientation; the
+# icosahedron's is the one hexify_build_icosa() sets.
 #
 # @name hexify-projection
 
@@ -13,10 +16,14 @@
 # ICOSAHEDRON INITIALIZATION
 # =============================================================================
 
-#' Initialize icosahedron geometry
+#' Set the Default Icosahedron Orientation
 #'
-#' Sets up the icosahedron state for ISEA projection. Uses standard ISEA3H
-#' orientation by default (vertex 0 at 11.25E, 58.28N).
+#' Sets the orientation read by the functions that take no grid: the
+#' projection functions in this family and the low-level conversions that take
+#' a resolution and an aperture. The standard ISEA orientation (vertex 0 at
+#' 11.25E, 58.28N, azimuth 0) is the default until this is called. A grid
+#' carries its own orientation (see the \code{orientation} argument of
+#' \code{\link{hex_grid}}), which this does not change.
 #'
 #' @param vert0_lon Vertex 0 longitude in degrees (default ISEA_VERT0_LON_DEG)
 #' @param vert0_lat Vertex 0 latitude in degrees (default ISEA_VERT0_LAT_DEG)
@@ -24,11 +31,9 @@
 #'
 #' @return Invisible NULL. Called for side effect.
 #'
-#' @details
-#' The icosahedron is initialized lazily at the C++ level when first needed.
-#' Manual call is only required for non-standard orientations.
 #'
 #' @family projection
+#' @keywords internal
 #' @export
 #' @examples
 #' # Use standard ISEA3H orientation
@@ -47,49 +52,70 @@ hexify_build_icosa <- function(vert0_lon = ISEA_VERT0_LON_DEG,
   invisible(NULL)
 }
 
-#' Get icosahedron face centers
+#' Get Face Centers of a Solid
 #'
-#' Returns the center coordinates of all 20 icosahedral faces.
+#' Returns the center coordinates of every face of the solid: 20 on the
+#' icosahedron, 8 on the octahedron, 4 on the tetrahedron.
 #'
-#' @return Data frame with 20 rows and columns lon, lat (degrees)
+#' @param polyhedron The solid: "icosahedron" (default), "octahedron" or
+#'   "tetrahedron", in its default orientation
+#'
+#' @return Data frame with one row per face and columns lon, lat (radians)
 #'
 #' @family projection
+#' @keywords internal
 #' @export
 #' @examples
 #' centers <- hexify_face_centers()
 #' plot(centers$lon, centers$lat)
-hexify_face_centers <- function() {
-  cpp_face_centers()
+#' nrow(hexify_face_centers("octahedron"))
+hexify_face_centers <- function(polyhedron = c("icosahedron", "octahedron", "tetrahedron")) {
+  cpp_face_centers(projection_icosa("isea", match.arg(polyhedron)))
 }
 
 # =============================================================================
 # FORWARD PROJECTION (lon/lat -> face coordinates)
 # =============================================================================
 
-#' Determine which face contains a point
+#' Determine Which Face Contains a Point
 #'
-#' Returns the icosahedral face index (0-19) containing the given coordinates.
+#' Returns the index of the face of the solid containing the given
+#' coordinates (0-19 on the icosahedron).
 #'
 #' @param lon Longitude in degrees
 #' @param lat Latitude in degrees
+#' @inheritParams hexify_face_centers
 #'
-#' @return Integer face index (0-19)
+#' @return Integer face index
 #'
 #' @family projection
+#' @keywords internal
 #' @export
 #' @examples
 #' face <- hexify_which_face(16.37, 48.21)
-hexify_which_face <- function(lon, lat) {
-  cpp_which_face(as.numeric(lon), as.numeric(lat))
+#' hexify_which_face(16.37, 48.21, polyhedron = "tetrahedron")
+hexify_which_face <- function(lon, lat, polyhedron = c("icosahedron", "octahedron", "tetrahedron")) {
+  cpp_which_face(projection_icosa("isea", match.arg(polyhedron)),
+                 as.numeric(lon), as.numeric(lat))
 }
 
-#' Forward Snyder projection
+#' Forward Face Projection
 #'
-#' Projects geographic coordinates onto the icosahedron, returning
+#' Projects geographic coordinates onto a face of the solid, returning
 #' face index and planar coordinates (tx, ty).
 #'
 #' @param lon Longitude in degrees
 #' @param lat Latitude in degrees
+#' @param projection Face projection: \code{"isea"} (Snyder's equal-area
+#'   projection), \code{"ivea"} (van Leeuwen and Strebe's vertex-oriented
+#'   equal-area projection), \code{"fuller"} (Fuller's projection, defined
+#'   on the icosahedron only), \code{"ak"} (Kaseorg's octahedral
+#'   projection) or \code{"akw"} (Kaseorg's with Hex9's trained warp), both
+#'   defined on the octahedron only
+#' @param polyhedron The solid: "icosahedron" (default), "octahedron" or
+#'   "tetrahedron", in its default orientation. Snyder (1992) gives his
+#'   equal-area projection for each; its angular distortion grows with the
+#'   faces' size.
 #'
 #' @return Named numeric vector: c(face, tx, ty)
 #'
@@ -98,117 +124,62 @@ hexify_which_face <- function(lon, lat) {
 #' typically in range \[0, 1\].
 #'
 #' @family projection
+#' @keywords internal
 #' @export
 #' @examples
 #' result <- hexify_forward(16.37, 48.21)
 #' # result["face"], result["icosa_triangle_x"], result["icosa_triangle_y"]
-hexify_forward <- function(lon, lat) {
-  cpp_snyder_forward(as.numeric(lon), as.numeric(lat))
+#' hexify_forward(16.37, 48.21, polyhedron = "tetrahedron")
+hexify_forward <- function(lon, lat, projection = c("isea", "fuller", "ivea", "ak", "akw"),
+                           polyhedron = c("icosahedron", "octahedron", "tetrahedron")) {
+  cpp_icosa_forward(projection_icosa(projection, polyhedron), as.numeric(lon),
+                    as.numeric(lat))
 }
 
-#' Forward projection to specific face
+#' Forward Projection to Specific Face
 #'
 #' Projects to a known face (skips face detection).
 #'
-#' @param face Face index (0-19)
+#' @param face Face index (0-19 on the icosahedron)
 #' @param lon Longitude in degrees
 #' @param lat Latitude in degrees
+#' @inheritParams hexify_forward
 #'
 #' @return Named numeric vector: c(icosa_triangle_x, icosa_triangle_y)
 #'
 #' @family projection
+#' @keywords internal
 #' @export
-hexify_forward_to_face <- function(face, lon, lat) {
-  cpp_project_to_icosa_triangle(as.integer(face), as.numeric(lon), as.numeric(lat))
+hexify_forward_to_face <- function(face, lon, lat, projection = c("isea", "fuller", "ivea", "ak", "akw"),
+                                   polyhedron = c("icosahedron", "octahedron", "tetrahedron")) {
+  cpp_project_to_icosa_triangle(projection_icosa(projection, polyhedron),
+                                as.integer(face), as.numeric(lon), as.numeric(lat))
 }
 
 # =============================================================================
 # INVERSE PROJECTION (face coordinates -> lon/lat)
 # =============================================================================
 
-#' Inverse Snyder projection
+#' Inverse Face Projection
 #'
 #' Converts face plane coordinates back to geographic coordinates.
 #'
 #' @param x X coordinate on face plane
 #' @param y Y coordinate on face plane
-#' @param face Face index (0-19)
-#' @param tol Convergence tolerance (NULL for default)
-#' @param max_iters Maximum iterations (NULL for default)
+#' @param face Face index (0-19 on the icosahedron)
+#' @inheritParams hexify_forward
 #'
 #' @return Named numeric vector: c(lon_deg, lat_deg)
 #'
 #' @family projection
+#' @keywords internal
 #' @export
 #' @examples
 #' coords <- hexify_inverse(0.5, 0.3, face = 2)
-hexify_inverse <- function(x, y, face, tol = NULL, max_iters = NULL) {
+hexify_inverse <- function(x, y, face,
+                           projection = c("isea", "fuller", "ivea", "ak", "akw"),
+                           polyhedron = c("icosahedron", "octahedron", "tetrahedron")) {
   stopifnot(length(x) == 1L, length(y) == 1L, length(face) == 1L)
-  cpp_face_xy_to_ll(as.numeric(x), as.numeric(y), as.integer(face), tol, max_iters)
+  cpp_face_xy_to_ll(projection_icosa(projection, polyhedron), as.numeric(x),
+                    as.numeric(y), as.integer(face))
 }
-
-# =============================================================================
-# PRECISION CONTROL
-# =============================================================================
-
-#' Set inverse projection precision
-#'
-#' Controls the accuracy/speed tradeoff for inverse Snyder projection.
-#'
-#' @param mode Preset mode: "fast", "default", "high", or "ultra"
-#' @param tol Custom tolerance (overrides mode if provided)
-#' @param max_iters Custom max iterations (overrides mode if provided)
-#'
-#' @return Invisible NULL
-#'
-#' @family projection
-#' @export
-#' @examples
-#' hexify_set_precision("high")
-#' hexify_set_precision(tol = 1e-12, max_iters = 100)
-hexify_set_precision <- function(mode = c("fast", "default", "high", "ultra"),
-                                  tol = NULL, max_iters = NULL) {
-  mode <- match.arg(mode)
-  cpp_snyder_inv_set_precision(mode, tol, max_iters)
-  invisible(NULL)
-}
-
-#' Get current precision settings
-#'
-#' @return List with tol and max_iters
-#'
-#' @family projection
-#' @export
-hexify_get_precision <- function() {
-  cpp_snyder_inv_get_precision()
-}
-
-#' Set verbose mode for inverse projection
-#'
-#' When enabled, prints convergence information.
-#'
-#' @param verbose Logical
-#'
-#' @return Invisible NULL
-#'
-#' @family projection
-#' @export
-hexify_set_verbose <- function(verbose = TRUE) {
-  cpp_snyder_inv_set_verbose(isTRUE(verbose))
-  invisible(NULL)
-}
-
-#' Get inverse projection statistics
-#'
-#' Returns and optionally resets convergence statistics.
-#'
-#' @param reset Whether to reset statistics after retrieval (default TRUE)
-#'
-#' @return List with statistics (iterations, convergence info, etc.)
-#'
-#' @family projection
-#' @export
-hexify_projection_stats <- function(reset = TRUE) {
-  cpp_snyder_inv_get_stats_and_reset()
-}
-

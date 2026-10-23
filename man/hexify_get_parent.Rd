@@ -2,7 +2,7 @@
 % Please edit documentation in R/hexify_index.R
 \name{hexify_get_parent}
 \alias{hexify_get_parent}
-\title{Get parent index}
+\title{Get Parent Index}
 \usage{
 hexify_get_parent(
   index,
@@ -11,14 +11,14 @@ hexify_get_parent(
 )
 }
 \arguments{
-\item{index}{Index string}
+\item{index}{Character vector of index strings}
 
 \item{aperture}{Aperture (3, 4, or 7)}
 
 \item{index_type}{Index encoding. Default "auto".}
 }
 \value{
-Parent index string
+Character vector of parent index strings
 }
 \description{
 Returns the parent index (one resolution coarser).

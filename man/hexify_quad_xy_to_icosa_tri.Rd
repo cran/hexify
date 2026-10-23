@@ -2,7 +2,7 @@
 % Please edit documentation in R/hexify_conversions.R
 \name{hexify_quad_xy_to_icosa_tri}
 \alias{hexify_quad_xy_to_icosa_tri}
-\title{Convert Quad XY to Icosa Triangle coordinates}
+\title{Convert Quad XY to Icosa Triangle Coordinates}
 \usage{
 hexify_quad_xy_to_icosa_tri(quad, quad_x, quad_y)
 }
@@ -30,7 +30,6 @@ print(tri)
 }
 \seealso{
 Other coordinate conversion:
-\code{\link[=hexify_cell_id_to_quad_ij]{hexify_cell_id_to_quad_ij()}},
 \code{\link[=hexify_cell_to_icosa_tri]{hexify_cell_to_icosa_tri()}},
 \code{\link[=hexify_cell_to_lonlat]{hexify_cell_to_lonlat()}},
 \code{\link[=hexify_cell_to_plane]{hexify_cell_to_plane()}},

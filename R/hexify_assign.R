@@ -2,7 +2,7 @@
 # POINT ASSIGNMENT (ISEA3H, APERTURE 3)
 # =============================================================================
 
-#' Assign hex cells ('ISEA3H', aperture 3) for lon/lat
+#' Assign Hex Cells ('ISEA3H', Aperture 3) for lon/lat
 #'
 #' Forward projection -> quantize -> cell centre -> inverse to lon/lat, on the
 #' aperture-3 pipeline used by [hexify()]: points fold into the non-negative
@@ -31,15 +31,13 @@ hexify_assign <- function(lon, lat, effective_res, make_polygons = FALSE) {
   lat <- as.numeric(lat)
   res <- as.integer(effective_res)
 
-  cell_id <- cpp_lonlat_to_cell(lon, lat, res, 3L)
-  center <- cpp_cell_to_lonlat(cell_id, res, 3L)
-  quad_ij <- cpp_cell_to_quad_ij(cell_id, res, 3L)
+  cell_id <- cpp_lonlat_to_cell(numeric(0), lon, lat, res, 3L, integer(0))
+  center <- cpp_cell_to_lonlat(numeric(0), cell_id, res, 3L, integer(0))
+  quad_ij <- cpp_cell_to_quad_ij(numeric(0), cell_id, res, 3L, integer(0))
 
   df <- data.frame(
-    id = vapply(seq_along(cell_id), function(k) {
-      cpp_cell_to_index(quad_ij$quad[k], quad_ij$i[k], quad_ij$j[k],
-                        res, 3L, "z3")
-    }, character(1)),
+    id = cpp_cell_to_index(numeric(0), quad_ij$quad, quad_ij$i, quad_ij$j, res, 3L,
+                           "z3"),
     face = quad_ij$quad,
     effective_res = res,
     center_lon = center$lon_deg,
@@ -53,5 +51,5 @@ hexify_assign <- function(lon, lat, effective_res, make_polygons = FALSE) {
     stop("make_polygons=TRUE requires the 'sf' package.")
   }
 
-  sf::st_sf(df, geometry = isea_cells_to_sfc(cell_id, res, 3L))
+  sf::st_sf(df, geometry = isea_cells_to_sfc(cell_id, res, 3L, numeric(0)))
 }

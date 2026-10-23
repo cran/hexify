@@ -2,14 +2,14 @@
 % Please edit documentation in R/hexify_conversions.R
 \name{hexify_grid_cell_to_lonlat}
 \alias{hexify_grid_cell_to_lonlat}
-\title{Convert cell ID to longitude/latitude using a grid object}
+\title{Convert Cell ID to Longitude/Latitude Using a Grid Object}
 \usage{
 hexify_grid_cell_to_lonlat(grid, cell_id)
 }
 \arguments{
 \item{grid}{Grid specification from hexify_grid()}
 
-\item{cell_id}{Numeric vector of cell IDs (1-based)}
+\item{cell_id}{Cell IDs, from 1: integer64, or whole numbers below 2^53}
 }
 \value{
 Data frame with lon_deg and lat_deg columns
@@ -29,7 +29,6 @@ coords <- hexify_grid_cell_to_lonlat(grid, cell_ids)
 \code{\link{hexify_grid_to_cell}} for the forward operation
 
 Other coordinate conversion:
-\code{\link[=hexify_cell_id_to_quad_ij]{hexify_cell_id_to_quad_ij()}},
 \code{\link[=hexify_cell_to_icosa_tri]{hexify_cell_to_icosa_tri()}},
 \code{\link[=hexify_cell_to_lonlat]{hexify_cell_to_lonlat()}},
 \code{\link[=hexify_cell_to_plane]{hexify_cell_to_plane()}},

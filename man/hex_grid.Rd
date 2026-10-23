@@ -11,14 +11,22 @@ hex_grid(
   type = c("isea", "h3"),
   resround = "nearest",
   crs = NULL,
-  radius_km = EARTH_RADIUS_KM
+  radius_km = EARTH_RADIUS_KM,
+  orientation = "standard",
+  projection = c("isea", "fuller", "ivea", "ak", "akw"),
+  region = NULL,
+  polyhedron = c("icosahedron", "octahedron", "tetrahedron"),
+  ellipsoid = NULL
 )
 }
 \arguments{
 \item{area_km2}{Target cell area in square kilometers. Mutually exclusive
 with \code{resolution}.}
 
-\item{resolution}{Grid resolution level (0-30 for ISEA, 0-15 for H3).
+\item{resolution}{Grid resolution level: for ISEA 0-30 for aperture 3, 0-29 for aperture 4, 0-21 for aperture 7
+on the icosahedron, where the cell count stays within the 2^63 - 1
+cell IDs a 64-bit integer numbers; 0-18 for aperture 9 (Hex9); 0-15 for
+H3.
 Mutually exclusive with \code{area_km2}. For H3, typical use cases by
 resolution:
 \itemize{
@@ -28,13 +36,19 @@ resolution:
 \item 11-15: building/sub-meter scale
 }}
 
-\item{aperture}{Grid aperture: 3 (default), 4, 7, a mixed family such as
+\item{aperture}{Grid aperture: 3 (default), 4, 7, 9 for Hex9 on the
+octahedron (see the Hex9 section), a mixed family such as
 "4/3", "4/7" or "7/4", or one aperture per resolution level as a vector,
 e.g. \code{c(4, 4, 7, 3)}. A family name refines by the first aperture for
 the first \code{floor(resolution / 2)} levels and by the second for the
 rest, which is how DGGRID arranges ISEA43H. A per-level vector needs
-\code{resolution} rather than \code{area_km2}. Ignored for H3 grids (fixed
-at 7).}
+\code{resolution} rather than \code{area_km2}; one shorter than
+\code{resolution} recurs, as OGC Topic 21 reads a list of refinement
+ratios, so \code{c(4, 3)} at resolution 5 refines by 4, 3, 4, 3, 4. It is
+stored as a comma-separated string with one aperture per level
+(\code{"4,3,4,3,4"}), which \code{aperture} also accepts. It names no
+level finer than \code{resolution}, so \code{get_children()} needs a
+family name. Ignored for H3 grids (fixed at 7).}
 
 \item{type}{Grid type: "isea" (default) or "h3".}
 
@@ -49,6 +63,40 @@ string. Defaults to 'WGS84' on Earth, and to a longlat CRS on the sphere of
 name of a body: "mercury", "venus", "earth" (default), "moon", "mars",
 "ceres", "jupiter", "io", "europa", "ganymede", "callisto", "saturn",
 "enceladus", "titan", "uranus", "neptune", "pluto".}
+
+\item{orientation}{Where the icosahedron of an ISEA grid sits on the
+sphere: "standard" (default), "ogc", "dymaxion", "gosper", "random",
+"region", "face", or
+\code{c(vert0_lon, vert0_lat, azimuth)} in degrees. See the Orientation
+section. H3 fixes its own orientation, so H3 grids take only "standard".}
+
+\item{projection}{How an ISEA-family grid projects each icosahedron face
+onto its plane triangle: "isea" (default), Snyder's equal-area
+projection, "ivea", van Leeuwen and Strebe's vertex-oriented equal-area
+projection, "fuller", Fuller's projection, or, on the octahedron, "ak",
+Kaseorg's projection, or "akw", Kaseorg's with Hex9's trained warp
+(see \code{\link{hex9_warp_download}}). See the Projection section.
+H3 fixes its own projection, so H3 grids take only "isea".}
+
+\item{region}{For \code{orientation = "region"} or \code{"face"}, the area
+to centre the grid
+on: \code{c(lon, lat)} in degrees, or an sf, sfc or bbox object, whose
+spherical centroid is used.}
+
+\item{polyhedron}{The solid an ISEA-family grid is built on:
+"icosahedron" (default), "octahedron" or "tetrahedron". See the
+Polyhedron section. H3 grids are built on the icosahedron and take only
+the default. Aperture 9 is defined on the octahedron, which it takes when
+no solid is named.}
+
+\item{ellipsoid}{The ellipsoid of revolution an ISEA-family grid reads
+geodetic latitude on: \code{NULL} (default) reads latitude on the sphere;
+"WGS84", "GRS80", "earth" (WGS84), "mars", "jupiter", "saturn",
+"uranus" or "neptune"; or \code{c(a, f)}, the semi-major axis in km and
+the flattening. Cells are then exactly equal-area on the ellipsoid, and
+the grid is sized on the radius of the sphere of the ellipsoid's area,
+which \code{radius_km} need not give. See the Earth Model section. H3
+reads latitude on the sphere and takes only \code{NULL}.}
 }
 \value{
 A HexGridInfo object containing the grid specification.
@@ -62,12 +110,16 @@ downstream functions.
 Exactly one of \code{area_km2} or \code{resolution} must be provided.
 
 When \code{area_km2} is provided, the resolution is calculated automatically
-using the cell count formula: N = 10 * aperture^res + 2 (ISEA) or by
-matching the closest H3 resolution.
+using the cell count formula: N = 10 * aperture^res + 2 (ISEA on the
+icosahedron, 4 * aperture^res + 2 on the octahedron, 2 * aperture^res + 2
+on the tetrahedron) or by matching the
+closest H3 resolution.
 
 H3 grids use the Uber H3 hierarchical hexagonal system. Unlike ISEA grids,
-H3 cells are NOT exactly equal-area (area varies by ~3-5\\% depending on
-location).
+H3 cells are NOT exactly equal-area: hexagon area varies by about a factor
+of 2 within a resolution, and by about 2.4 once the twelve pentagons are
+counted. The variation follows position on the icosahedron rather than
+latitude, with the smallest cells near face centres.
 }
 \section{Other Bodies}{
 
@@ -91,6 +143,205 @@ square of the radius ratio, exactly. One caveat carries: an 'H3' cell ID
 names a position in 'H3''s topology, which 'Uber''s 'H3' reads on Earth, so
 the IDs of a grid on another body are that topology on that body and are not
 interchangeable with Earth 'H3' data.
+}
+
+\section{Earth Model}{
+
+
+By default a grid reads geodetic latitude as latitude on its sphere, as
+DGGRID and H3 do, and an Earth grid shares the 'WGS84' ellipsoid's area
+among its cells. Measured geodesically on 'WGS84', the cells' areas then
+run from 0.9955 times the reported area at the equator to 1.0090 times it
+at the poles (\code{paper/bench/bench_ellipsoid_area.R}): within the 1
+percent error budget OGC Topic 21 allows a spherical earth model for an
+equal-area grid (Requirement 28), and systematic in latitude.
+
+With \code{ellipsoid}, geodetic latitude is converted to authalic
+latitude, the latitude on the sphere of the ellipsoid's area below which
+that sphere holds the same area as the ellipsoid below the geodetic one,
+before projecting, and back after. This carries the ellipsoid onto that
+sphere keeping every area, so cells of Snyder's and of the vertex-oriented
+projection are equal-area on the ellipsoid itself; on 'WGS84' the measured
+areas agree with the reported ones to the measurement's own error, about
+2e-6. Fuller's projection stays not equal-area, but its cell areas are
+then the cells' areas on the ellipsoid. The conversion moves a point by up
+to 0.13 degrees of latitude on 'WGS84', so a grid with an ellipsoid places
+points in other cells than the same grid without one, and than DGGRID.
+Cell IDs, the hierarchy and neighbours are the same; kilometre figures of
+lengths are measured on the sphere of the ellipsoid's area.
+
+The ISEA3H and ISEA7H DGGRS definitions OGC registers are
+\code{hex_grid(aperture = 3, ellipsoid = "WGS84", orientation = "ogc")}
+and its aperture-7 twin, and DGGAL's IVEA3H and IVEA7H the same with
+\code{projection = "ivea"}.
+
+\preformatted{
+g <- hex_grid(resolution = 9, aperture = 3, ellipsoid = "WGS84")
+hex_grid(resolution = 6, aperture = 7, ellipsoid = "mars")
+hex_grid(resolution = 6, ellipsoid = c(6378.137, 1 / 298.257222101)) # GRS80
+}
+}
+
+\section{Orientation}{
+
+
+An ISEA grid is built on a solid, an icosahedron unless \code{polyhedron}
+names another, and its orientation places that solid on the sphere: vertex
+0 at longitude \code{vert0_lon} and latitude \code{vert0_lat}, and vertex 1
+at azimuth \code{azimuth} seen from vertex 0, all in degrees, as DGGRID's
+\code{dggs_vert0_lon}, \code{dggs_vert0_lat} and \code{dggs_vert0_azimuth}
+do.
+
+\itemize{
+\item "standard" is the ISEA orientation on the icosahedron: vertex 0 at
+11.25E, 58.28N, azimuth 0, symmetric about the equator, with eleven
+of the twelve pentagons over the oceans and one in Sichuan (Sahr et al.
+2003). On the octahedron it puts vertices at both poles and at
+longitudes 0, 90E, 180 and 90W on the equator.
+\item "ogc" is the orientation of the ISEA3H and ISEA7H DGGRS
+definitions registered with OGC and of DGGAL's grids: vertex 0 at
+11.20E and latitude arctan of the golden ratio (58.28N) on the sphere,
+azimuth 0. With \code{ellipsoid = "WGS84"} that vertex lies at
+geodetic latitude 58.397145907431N.
+\item "dymaxion" is Fuller's orientation of the icosahedron for his
+Dymaxion map: vertex 0 at 5.2454W, 2.3009N, azimuth 7.46658 (Sahr et
+al. 2003), with all twelve pentagons in the ocean. With
+\code{projection = "fuller"} the grid lies on Fuller's Dymaxion map.
+\item "gosper" places the octahedron as Van de Sande's Gosper World
+places its poles, at midpoints of octahedron edges: vertex 0 at
+21.25W, 45N, vertex 1 across the north pole from it, all six vertices
+at least 619 km offshore. \code{\link{net_layout}} lays it out as four
+hexagons. The standard octahedron puts the poles at vertices instead,
+as Rus's four-hexagon map does.
+\item "random" draws vertex 0 uniformly on the sphere and the azimuth
+uniformly in [0, 360), from R's random number generator, so
+\code{set.seed()} repeats it. Grids in several random orientations show
+how much a result depends on where the cell boundaries fall.
+\item "region" places the grid as DGGRID's \code{REGION_CENTER} does: the
+centre of \code{region} lands on the midpoint of an edge of the solid,
+the middle of the two faces sharing it, far from the vertices where the
+vertex cells and the largest distortion sit.
+\item "face" places the centre of \code{region} on the centre of a face.
+On the icosahedron that is about 20.9 degrees from the nearest face edge
+and 37.4 degrees from the nearest vertex, so a region up to about 40
+degrees across lies on one face, away from the face edges where the
+projection bends.
+}
+
+Rotating the icosahedron rotates the grid with it, so cell IDs, the cell
+hierarchy and neighbours are the same under every orientation; only where
+each cell sits on the sphere changes. Every function taking the grid reads
+its orientation. On a grid with an \code{ellipsoid} the orientation places
+the solid on the sphere of the ellipsoid's area, so \code{vert0_lat} is an
+authalic latitude; a \code{region} is given in geodetic latitude.
+
+\preformatted{
+alps <- hex_grid(area_km2 = 100, orientation = "region", region = c(10, 46.5))
+hex_grid(resolution = 8, orientation = c(0, 90, 0))   # vertex 0 at the pole
+}
+}
+
+\section{Projection}{
+
+
+An ISEA-family grid lays its cells out on the plane triangles of the
+icosahedron's faces, and the projection carries each spherical face onto its
+triangle. With \code{"isea"}, Snyder's icosahedral equal-area projection,
+every cell of a resolution has the same area. With \code{"ivea"}, van
+Leeuwen and Strebe's (2006) vertex-oriented great-circle projection, cells
+are equal-area as well: the projection maps the great circles through each
+vertex of a face to straight lines, which leaves no cusps along the face
+edges and gives lower, more even angular distortion than Snyder's (their
+Table 1). These are DGGAL's IVEA3H and IVEA7H (Jacovella-St-Louis et al.
+2025); DGGAL places the icosahedron at \code{orientation = c(11.20,
+58.282525588538995, 0)}, 0.05 degrees west of the standard one, and reads
+latitudes as WGS84 geodetic, mapping them to the authalic sphere. With
+\code{"fuller"}, Fuller's
+projection keeps lengths along the face edges and is not equal-area, so
+\code{area_km2} is the mean cell area and \code{cell_area()} reports each
+cell's own; the Equal-Area Earth Reference System of OGC Topic 21 asks for
+cells of equal area, so a Fuller grid falls outside it. These are DGGRID's
+\code{dggs_proj ISEA} and \code{FULLER},
+giving FULLER3H, FULLER4H, FULLER7H and FULLER43H. Cell IDs, the hierarchy
+and neighbours are the same under every projection; where each cell's
+centre and corners sit on the sphere differs.
+
+\preformatted{
+hex_grid(resolution = 5, aperture = 3, projection = "ivea")     # IVEA3H
+hex_grid(resolution = 5, aperture = 4, projection = "fuller")   # FULLER4H
+}
+}
+
+\section{Polyhedron}{
+
+
+Snyder's equal-area projection and the vertex-oriented one are defined on
+every regular solid with triangular faces, and a hexagonal grid lies on
+the icosahedron, the octahedron and the tetrahedron alike: each pair of
+faces sharing an edge forms a diamond of cells, and the cell at each vertex
+has one side per face meeting there. The icosahedron has twelve pentagons,
+the octahedron six squares and the tetrahedron four triangles; every other
+cell is a hexagon, and every cell of a resolution has the same area except
+the vertex cells, which have five sixths, two thirds or one half of it, by
+their sides. The octahedron's cells are more distorted than the
+icosahedron's and the tetrahedron's more again, so they suit layouts that
+need their four- or three-fold symmetry rather than analysis. Fuller's
+projection is defined on the icosahedron only.
+
+The tetrahedron unfolds into a strip of its two diamonds. Each long side
+of the strip folds onto itself at its midpoint, so the second diamond
+holds the far edge of its box in place of the near edge it shares with the
+first; its cells still number one box's worth.
+
+\preformatted{
+hex_grid(resolution = 5, aperture = 4, polyhedron = "octahedron")
+hex_grid(resolution = 5, aperture = 4, polyhedron = "tetrahedron")
+}
+}
+
+\section{Hex9}{
+
+
+\code{aperture = 9} builds Hex9 (Griffin 2026), the hexagonal grid of the
+octahedron that refines by 9 with no central child. Level \eqn{L} divides
+each octahedron edge into \eqn{3^{L+1}} steps of a triangular lattice and
+centres a hexagon on every third lattice point, one class of a three-colouring
+of the lattice that leaves the solid's vertices out; the octahedron's even
+vertex valence keeps that class consistent across its faces, which the
+icosahedron's odd valence does not. There are \eqn{12 \cdot 9^L} cells, all
+hexagons. Two meet at each of the six vertices, a corner each, and share both
+edges there, so those twelve cells have five neighbours. On an equal-area
+projection every cell has the same area.
+
+A line through each cell's centre cuts it into two halves, each inside one
+triangle of the next coarser level, and the cell is named through its half
+in a triangle of Griffin's mode 0: one digit for each level of triangles
+holding that half, digit 0 picking one of the twelve cells of resolution 0
+(0-11) and every further digit one of nine (0-8). The cell ID is that digit
+string read as a number, digit 0 counting \eqn{9^L}, plus one, so the IDs of
+a resolution run from 1 to \eqn{12 \cdot 9^L}; the digit strings are those
+of 'libhex9', Griffin's reference implementation, and
+\code{cell_to_index()} writes a cell's 'libhex9' label, its digits and key
+tail. A cell's parent is the cell of the coarser resolution holding its
+mode-0 half, and every cell has nine children. Three of them straddle the
+cell's boundary, so a cell's children cover it only in part.
+
+Hex9's own projection is Kaseorg's octahedral projection, \code{"ak"}
+(Griffin 2026, Sec. 11a): it maps each octant's weights on its three
+vertices through tangents of the weights, coupled by a fitted constant, and
+is not equal-area, its cells varying by about 20 percent in area across a
+face. 'libhex9' corrects that with a warp of each face trained by optimal
+transport (Sec. 11b): \code{"akw"} reads it (\code{\link{hex9_warp_download}}
+fetches it), and a grid on it names every point by the cell 'libhex9''s
+functions on the sphere name it. Any of the face projections serves the
+same cells of the octahedron, with the same IDs; where each cell lies on
+the sphere follows \code{projection}.
+
+\preformatted{
+hex_grid(resolution = 4, aperture = 9)                       # Hex9
+hex_grid(resolution = 4, aperture = 9, projection = "ivea")
+hex_grid(resolution = 4, aperture = 9, projection = "ak")
+}
 }
 
 \section{One Grid, Many Datasets}{

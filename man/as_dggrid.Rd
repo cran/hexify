@@ -2,28 +2,51 @@
 % Please edit documentation in R/dggrid_compat.R
 \name{as_dggrid}
 \alias{as_dggrid}
-\title{Convert hexify grid to 'dggridR'-compatible grid object}
+\alias{format.dggs}
+\alias{print.dggs}
+\title{Convert hexify Grid to 'dggridR'-compatible Grid Object}
 \usage{
 as_dggrid(grid)
+
+\method{format}{dggs}(x, ...)
+
+\method{print}{dggs}(x, ...)
 }
 \arguments{
-\item{grid}{A hexify_grid object from hexify_grid()}
+\item{grid}{A grid from \code{\link{hex_grid}}, or a legacy hexify_grid}
+
+\item{x}{A dggs object}
+
+\item{...}{Ignored}
 }
 \value{
 A list with 'dggridR'-compatible fields:
-\item{pole_lon_deg}{Longitude of grid pole (default 11.25)}
-\item{pole_lat_deg}{Latitude of grid pole (default 58.282525588538995)}
-\item{azimuth_deg}{Grid azimuth rotation (default 0)}
+\item{pole_lon_deg}{Longitude of icosahedron vertex 0 (standard 11.25)}
+\item{pole_lat_deg}{Latitude of icosahedron vertex 0 (standard
+58.282525588538995)}
+\item{azimuth_deg}{Azimuth of vertex 1 seen from vertex 0 (standard 0)}
 \item{aperture}{Grid aperture (3, 4, or 7)}
 \item{res}{Resolution level}
 \item{topology}{Grid topology ("HEXAGON")}
-\item{projection}{Map projection ('ISEA')}
+\item{projection}{Face projection ('ISEA' or 'FULLER')}
 \item{precision}{Output decimal precision (default 7)}
+It prints as one line naming the grid in DGGRID's terms.
 }
 \description{
 Creates a 'dggridR'-compatible grid specification from a hexify_grid object.
 The resulting object can be used with 'dggridR' functions that accept a dggs
 object.
+}
+\details{
+A dggs carries no body radius, so a grid built on another body cannot be
+expressed as one: 'dggridR' reads every dggs on Earth's radius, and its areas,
+spacings and CLS come back on Earth. Converting such a grid warns.
+}
+\examples{
+dggs <- as_dggrid(hex_grid(resolution = 5, aperture = 3))
+dggs
+dggrid_is_compatible(dggs)
+from_dggrid(dggs)
 }
 \seealso{
 Other 'dggridR' compatibility:

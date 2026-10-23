@@ -2,7 +2,7 @@
 % Please edit documentation in R/hexify_projection.R
 \name{hexify_build_icosa}
 \alias{hexify_build_icosa}
-\title{Initialize icosahedron geometry}
+\title{Set the Default Icosahedron Orientation}
 \usage{
 hexify_build_icosa(
   vert0_lon = ISEA_VERT0_LON_DEG,
@@ -21,12 +21,12 @@ hexify_build_icosa(
 Invisible NULL. Called for side effect.
 }
 \description{
-Sets up the icosahedron state for ISEA projection. Uses standard ISEA3H
-orientation by default (vertex 0 at 11.25E, 58.28N).
-}
-\details{
-The icosahedron is initialized lazily at the C++ level when first needed.
-Manual call is only required for non-standard orientations.
+Sets the orientation read by the functions that take no grid: the
+projection functions in this family and the low-level conversions that take
+a resolution and an aperture. The standard ISEA orientation (vertex 0 at
+11.25E, 58.28N, azimuth 0) is the default until this is called. A grid
+carries its own orientation (see the \code{orientation} argument of
+\code{\link{hex_grid}}), which this does not change.
 }
 \examples{
 # Use standard ISEA3H orientation
@@ -40,11 +40,8 @@ Other projection:
 \code{\link[=hexify_face_centers]{hexify_face_centers()}},
 \code{\link[=hexify_forward]{hexify_forward()}},
 \code{\link[=hexify_forward_to_face]{hexify_forward_to_face()}},
-\code{\link[=hexify_get_precision]{hexify_get_precision()}},
 \code{\link[=hexify_inverse]{hexify_inverse()}},
-\code{\link[=hexify_projection_stats]{hexify_projection_stats()}},
-\code{\link[=hexify_set_precision]{hexify_set_precision()}},
-\code{\link[=hexify_set_verbose]{hexify_set_verbose()}},
 \code{\link[=hexify_which_face]{hexify_which_face()}}
 }
 \concept{projection}
+\keyword{internal}

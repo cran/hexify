@@ -2,16 +2,20 @@
 % Please edit documentation in R/grid_helpers.R
 \name{grid_global}
 \alias{grid_global}
-\title{Generate a global hexagon grid}
+\title{Generate a Global Hexagon Grid}
 \usage{
 grid_global(grid, wrap_dateline = TRUE)
 }
 \arguments{
 \item{grid}{A HexGridInfo object specifying the grid parameters}
 
-\item{wrap_dateline}{Logical. If TRUE (default), antimeridian-crossing
-polygons are split at +/-180 degrees. Set to FALSE for orthographic/globe
-projections where wrapping creates gaps.}
+\item{wrap_dateline}{Logical. If TRUE (default), calls
+\code{sf::st_wrap_dateline()} to split antimeridian-crossing polygons,
+which flat maps and planar (GEOS) operations need.
+Set to FALSE for orthographic/globe projections where wrapping creates gaps,
+and for spherical (s2) operations: each cell then stays one polygon whose
+corners lie in -180..180, so a cell crossing the antimeridian spans a
+flat lon/lat map.}
 }
 \value{
 sf object with hexagon polygons
@@ -20,9 +24,9 @@ sf object with hexagon polygons
 Creates hexagon polygons covering the entire Earth.
 }
 \details{
-This function generates a complete global grid by sampling points
-densely across the globe. For large grids (many small cells),
-consider using \code{grid_rect()} to generate regional subsets.
+Every cell of the grid, one row each, in cell ID order for ISEA grids.
+For large grids (many small cells), consider using \code{grid_rect()} to
+generate regional subsets.
 }
 \examples{
 # Coarse global grid

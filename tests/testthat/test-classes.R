@@ -38,9 +38,12 @@ test_that("HexGridInfo show() prints correctly", {
   grid <- hex_grid(area_km2 = 1000)
 
   output <- capture.output(show(grid))
-  expect_true(any(grepl("HexGridInfo", output)))
-  expect_true(any(grepl("Aperture", output)))
-  expect_true(any(grepl("Resolution", output)))
+  expect_length(output, 1)
+  expect_match(output, "^<HexGridInfo> aperture 3, resolution ")
+
+  detail <- capture.output(print(summary(grid)))
+  expect_true(any(grepl("Aperture", detail)))
+  expect_true(any(grepl("Resolution", detail)))
 })
 
 test_that("HexGridInfo show() handles mixed aperture", {
@@ -115,7 +118,7 @@ test_that("HexData [[ accessor works", {
   expect_equal(result[["value"]], c(1, 2))
   expect_equal(result[["cell_id"]], result@cell_id)
   expect_equal(result[["cell_cen_lon"]], result@cell_center[, "lon"])
-  expect_equal(result[["cell_area_km2"]], rep(result@grid@area_km2, 2))
+  expect_equal(result[["cell_area_km2"]], unname(cell_area(grid = result)))
 })
 
 test_that("HexData [[<- assignment works", {
@@ -196,9 +199,13 @@ test_that("HexData show() prints correctly", {
   result <- hexify(df, lon = "lon", lat = "lat", area_km2 = 1000)
 
   output <- capture.output(show(result))
-  expect_true(any(grepl("HexData", output)))
-  expect_true(any(grepl("Rows", output)))
-  expect_true(any(grepl("Cells", output)))
+  expect_length(output, 2)
+  expect_match(output[1], "^<HexData> 2 rows, 3 columns, 2 cells")
+  expect_match(output[2], "grid: aperture 3")
+
+  detail <- capture.output(print(summary(result)))
+  expect_true(any(grepl("Rows", detail)))
+  expect_true(any(grepl("Cells", detail)))
 })
 
 test_that("HexData show() handles sf data", {
@@ -220,7 +227,7 @@ test_that("HexData show() handles many columns", {
   )
   result <- hexify(df, lon = "lon", lat = "lat", area_km2 = 1000)
 
-  output <- capture.output(show(result))
+  output <- capture.output(print(summary(result)))
   expect_true(any(grepl("\\.\\.\\.", output)))  # Truncated columns
 })
 
@@ -419,6 +426,84 @@ test_that("HexData show() handles more than 3 rows", {
   )
   result <- hexify(df, lon = "lon", lat = "lat", area_km2 = 5000)
 
-  output <- capture.output(show(result))
+  output <- capture.output(print(summary(result)))
   expect_true(any(grepl("more rows", output)))
+})
+
+# =============================================================================
+# n_cells and summary for HexGridInfo
+# =============================================================================
+
+test_that("n_cells reports the cell count a grid prints", {
+  grids <- list(
+    hex_grid(area_km2 = 100000),
+    hex_grid(resolution = 4, aperture = 7),
+    hex_grid(resolution = 5, aperture = "4/3"),
+    hex_grid(resolution = 4, radius_km = "mars"),
+    hex_grid(resolution = 5, type = "h3")
+  )
+
+  for (grid in grids) {
+    printed <- utils::capture.output(suppressMessages(print(summary(grid))))
+    total <- printed[grepl("^Total Cells:", printed)]
+    expect_length(total, 1)
+
+    expect_equal(sprintf("Total Cells: %.0f", n_cells(grid)), total)
+    expect_gt(n_cells(grid), 0)
+  }
+})
+
+test_that("n_cells on a grid counts cells, on data counts those occupied", {
+  grid <- hex_grid(area_km2 = 100000)
+  df <- data.frame(lon = c(0, 10, 20), lat = c(45, 50, 55))
+  result <- hexify(df, lon = "lon", lat = "lat", grid = grid)
+
+  expect_equal(n_cells(grid), 2 + 10 * 3^grid@resolution)
+  expect_equal(n_cells(result), length(unique(result@cell_id)))
+  expect_lt(n_cells(result), n_cells(grid))
+})
+
+test_that("n_cells reaches a grid taken from data", {
+  df <- data.frame(lon = c(0, 10), lat = c(45, 50))
+  result <- hexify(df, lon = "lon", lat = "lat", area_km2 = 100000)
+
+  expect_equal(n_cells(grid_info(result)), n_cells(result@grid))
+})
+
+test_that("summary of a grid carries what the grid prints", {
+  grid <- hex_grid(area_km2 = 100000)
+  s <- summary(grid)
+
+  expect_s3_class(s, "hexify_grid_summary")
+  expect_equal(s$grid_type, "isea")
+  expect_equal(s$resolution, grid@resolution)
+  expect_equal(s$area_km2, grid@area_km2)
+  expect_equal(s$diagonal_km, grid@diagonal_km)
+  expect_equal(s$n_cells, n_cells(grid))
+  expect_true(s$earth)
+
+  # Printing the object gives one line; its summary gives the detail
+  shown <- utils::capture.output(show(grid))
+  expect_length(shown, 1)
+  expect_match(shown, formatC(n_cells(grid), format = "f", digits = 0, big.mark = ","),
+               fixed = TRUE)
+  expect_lt(length(shown), length(utils::capture.output(print(s))))
+})
+
+test_that("summary of gridded data carries what the object prints", {
+  df <- data.frame(lon = c(0, 10, 20), lat = c(45, 50, 55), value = 1:3)
+  result <- hexify(df, lon = "lon", lat = "lat", area_km2 = 100000)
+  s <- summary(result)
+
+  expect_s3_class(s, "hexify_data_summary")
+  expect_equal(s$rows, 3L)
+  expect_equal(s$columns, 3L)
+  expect_equal(s$column_names, c("lon", "lat", "value"))
+  expect_equal(s$n_cells, n_cells(result))
+  expect_equal(s$type, "data.frame")
+  expect_s3_class(s$grid, "hexify_grid_summary")
+
+  shown <- utils::capture.output(show(result))
+  expect_length(shown, 2)
+  expect_lt(length(shown), length(utils::capture.output(print(s))))
 })

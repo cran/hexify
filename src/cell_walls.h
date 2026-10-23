@@ -1,0 +1,288 @@
+#ifndef HEXIFY_CELL_WALLS_H
+#define HEXIFY_CELL_WALLS_H
+
+// Lengths and areas on the unit sphere along cell walls, shared by every
+// backend. A wall runs from one corner to the next as an odd number of unit
+// vectors: the even entries lie on the wall, and each odd entry is the wall's
+// point halfway between its two neighbours in the wall's own parameter. A
+// curved wall is densified before it reaches these functions until each such
+// piece is nearly a circular arc; a great-circle wall carries its arcs'
+// midpoints (great_circle_wall).
+
+#include <Rcpp.h>
+#include <array>
+#include <cmath>
+#include <utility>
+#include <vector>
+
+namespace hexify {
+
+using UnitVec = std::array<double, 3>;
+
+inline UnitVec unit_from_lonlat(double lon_deg, double lat_deg) {
+    const double d = M_PI / 180.0;
+    const double cl = std::cos(lat_deg * d);
+    return {cl * std::cos(lon_deg * d), cl * std::sin(lon_deg * d), std::sin(lat_deg * d)};
+}
+
+// Angle between two unit vectors, accurate at every separation.
+inline double arc_angle(const UnitVec& a, const UnitVec& b) {
+    const double cx = a[1] * b[2] - a[2] * b[1];
+    const double cy = a[2] * b[0] - a[0] * b[2];
+    const double cz = a[0] * b[1] - a[1] * b[0];
+    return std::atan2(std::sqrt(cx * cx + cy * cy + cz * cz),
+                      a[0] * b[0] + a[1] * b[1] + a[2] * b[2]);
+}
+
+inline UnitVec normalized(const UnitVec& v) {
+    const double n = std::sqrt(v[0] * v[0] + v[1] * v[1] + v[2] * v[2]);
+    return {v[0] / n, v[1] / n, v[2] / n};
+}
+
+// The point a fraction t of the way along the great-circle arc a -> b.
+inline UnitVec slerp(const UnitVec& a, const UnitVec& b, double t) {
+    const double w = arc_angle(a, b);
+    if (w < 1e-12) return a;
+    const double s = std::sin(w);
+    const double fa = std::sin((1.0 - t) * w) / s, fb = std::sin(t * w) / s;
+    return normalized({fa * a[0] + fb * b[0], fa * a[1] + fb * b[1], fa * a[2] + fb * b[2]});
+}
+
+// A wall through the given points, joined by great-circle arcs, in the form
+// above.
+inline std::vector<UnitVec> great_circle_wall(const std::vector<UnitVec>& pts) {
+    std::vector<UnitVec> out;
+    for (size_t i = 0; i + 1 < pts.size(); i++) {
+        out.push_back(pts[i]);
+        out.push_back(normalized({pts[i][0] + pts[i + 1][0], pts[i][1] + pts[i + 1][1],
+                                  pts[i][2] + pts[i + 1][2]}));
+    }
+    out.push_back(pts.back());
+    return out;
+}
+
+// Length of the wall piece a -> m -> b. The two chords a m and m b fall short
+// of the curve by a quarter of what the chord a b does, to leading order, so
+// Richardson's extrapolation (4 (am + mb) - ab) / 3 removes that term. On a
+// great circle it is am + mb exactly.
+inline double piece_length(const UnitVec& a, const UnitVec& m, const UnitVec& b) {
+    return (4.0 * (arc_angle(a, m) + arc_angle(m, b)) - arc_angle(a, b)) / 3.0;
+}
+
+// The parameter s, from 0 to 1, at which the wall piece a -> m -> b has run
+// t of its two chords am and mb, the run taken as the quadratic in s through
+// 0, am and am + mb at s = 0, 1/2 and 1.
+inline double piece_parameter(double am, double mb, double t) {
+    const double alpha = 3.0 * am - mb, beta = 2.0 * (mb - am);
+    const double root = std::sqrt(std::max(0.0, alpha * alpha + 4.0 * beta * t));
+    return alpha + root > 0.0 ? 2.0 * t / (alpha + root) : 0.0;
+}
+
+// Signed solid angle of the spherical triangle a b c, positive when a b c
+// turn counter-clockwise seen from outside (Van Oosterom and Strackee).
+inline double triangle_solid_angle(const UnitVec& a, const UnitVec& b, const UnitVec& c) {
+    const double triple = a[0] * (b[1] * c[2] - b[2] * c[1]) +
+                          a[1] * (b[2] * c[0] - b[0] * c[2]) +
+                          a[2] * (b[0] * c[1] - b[1] * c[0]);
+    const double denom = 1.0 + (a[0] * b[0] + a[1] * b[1] + a[2] * b[2]) +
+                         (b[0] * c[0] + b[1] * c[1] + b[2] * c[2]) +
+                         (c[0] * a[0] + c[1] * a[1] + c[2] * a[2]);
+    return 2.0 * std::atan2(triple, denom);
+}
+
+// Solid angle enclosed by a cell's walls, counter-clockwise, each in the form
+// above, with every wall ending where the next begins. The polygon through the
+// wall points is fanned from their mean, and each piece a -> m -> b adds the
+// sliver between its chord and the curve: 4/3 of the triangle a m b, the area
+// of a parabolic segment over its inscribed triangle (Archimedes).
+inline double enclosed_solid_angle(const std::vector<std::vector<UnitVec>>& walls) {
+    UnitVec o = {0.0, 0.0, 0.0};
+    for (const auto& w : walls) {
+        for (size_t i = 0; i + 1 < w.size(); i += 2) {
+            for (int d = 0; d < 3; d++) o[d] += w[i][d];
+        }
+    }
+    o = normalized(o);
+    double omega = 0.0;
+    for (const auto& w : walls) {
+        for (size_t i = 0; i + 2 < w.size(); i += 2) {
+            omega += triangle_solid_angle(o, w[i], w[i + 2]) +
+                     4.0 / 3.0 * triangle_solid_angle(w[i], w[i + 1], w[i + 2]);
+        }
+    }
+    return std::fabs(omega);
+}
+
+// A wall's length and the point halfway along it, both on the unit sphere.
+struct WallShape {
+    double length;
+    UnitVec midpoint;
+};
+
+// Secant steps taken to place a wall's midpoint within its piece, and the
+// remaining length, as a fraction of the wall's, at which they stop.
+constexpr int kMidpointSteps = 8;
+constexpr double kMidpointSlack = 1e-15;
+
+// A wall's shape, the wall in the form above and 'point_at(k, s)' the point at
+// parameter s, from 0 to 1, of its k-th piece (pts[2k] -> pts[2k + 2]) on the
+// wall itself. The midpoint is placed on the wall, not on the points: in the
+// piece holding it, at the parameter s where the piece has run the remaining
+// length, its run to s measured as piece_length(a, point_at(k, s / 2),
+// point_at(k, s)) and s found by secant steps from piece_parameter()'s guess.
+template <class PointAt>
+inline WallShape wall_shape(const std::vector<UnitVec>& pts, PointAt point_at) {
+    double length = 0.0;
+    for (size_t i = 0; i + 2 < pts.size(); i += 2) {
+        length += piece_length(pts[i], pts[i + 1], pts[i + 2]);
+    }
+    double half = 0.5 * length;
+    for (size_t i = 0; i + 2 < pts.size(); i += 2) {
+        const double step = piece_length(pts[i], pts[i + 1], pts[i + 2]);
+        if (half > step && i + 4 < pts.size()) {
+            half -= step;
+            continue;
+        }
+        const size_t k = i / 2;
+        const UnitVec& a = pts[i];
+        const double am = arc_angle(a, pts[i + 1]);
+        const double mb = arc_angle(pts[i + 1], pts[i + 2]);
+        double s0 = 0.0, run0 = 0.0;
+        double s1 = piece_parameter(am, mb, std::min(half, step) / step * (am + mb));
+        UnitVec p = point_at(k, s1);
+        for (int it = 0; it < kMidpointSteps; it++) {
+            const double run1 = piece_length(a, point_at(k, 0.5 * s1), p);
+            if (std::fabs(run1 - half) <= kMidpointSlack * length || run1 == run0) break;
+            const double s2 = s1 + (half - run1) * (s1 - s0) / (run1 - run0);
+            s0 = s1;
+            run0 = run1;
+            s1 = std::min(1.0, std::max(0.0, s2));
+            p = point_at(k, s1);
+        }
+        return {length, p};
+    }
+    return {length, pts.back()};
+}
+
+// The shape of a wall whose pieces are great-circle arcs (great_circle_wall).
+inline WallShape wall_shape(const std::vector<UnitVec>& pts) {
+    return wall_shape(pts, [&pts](size_t k, double s) {
+        return slerp(pts[2 * k], pts[2 * k + 2], s);
+    });
+}
+
+// One wall between two cells, on the unit sphere: its length, the distance
+// between the two cell centres, and the distance from the wall's midpoint to
+// the midpoint of the arc joining the centres. Gregory et al. (2008), after
+// Heikes and Randall (1995), divide the last by the first: the cell wall
+// midpoint ratio.
+struct WallMeasure {
+    double wall;
+    double centre_distance;
+    double midpoint_offset;
+};
+
+inline WallMeasure measure_wall(const WallShape& w, const UnitVec& centre,
+                                const UnitVec& neighbour) {
+    const UnitVec mid = normalized({centre[0] + neighbour[0], centre[1] + neighbour[1],
+                                    centre[2] + neighbour[2]});
+    return {w.length, arc_angle(centre, neighbour), arc_angle(w.midpoint, mid)};
+}
+
+// For each neighbour of a cell, the wall it lies across: the wall whose
+// midpoint is nearest the neighbour's centre. On a hexagonal tiling the wall
+// facing a neighbour has its midpoint about one inradius from that
+// neighbour's centre and every other wall about sqrt(3) inradii, so the
+// choice holds under any projection's distortion. Returns false unless every
+// wall is chosen by exactly one neighbour.
+inline bool walls_of_neighbours(const std::vector<WallShape>& walls,
+                                const std::vector<UnitVec>& neighbours,
+                                std::vector<int>& wall_of) {
+    wall_of.assign(neighbours.size(), -1);
+    if (walls.size() != neighbours.size()) return false;
+    std::vector<bool> taken(walls.size(), false);
+    for (size_t n = 0; n < neighbours.size(); n++) {
+        double best = 1e300;
+        for (size_t w = 0; w < walls.size(); w++) {
+            const double d = arc_angle(walls[w].midpoint, neighbours[n]);
+            if (d < best) {
+                best = d;
+                wall_of[n] = static_cast<int>(w);
+            }
+        }
+        if (taken[wall_of[n]]) return false;
+        taken[wall_of[n]] = true;
+    }
+    return true;
+}
+
+// Each wall of a cell with the neighbour across it, as (neighbour, wall)
+// pairs in neighbour order. With one wall per neighbour that is
+// walls_of_neighbours(); a cell with more walls than neighbours -- a Hex9
+// cell beside a vertex of the solid, which meets its partner there across
+// two walls -- gives each wall the neighbour whose centre is nearest its
+// midpoint. False unless every wall and every neighbour is paired.
+inline bool wall_pairs(const std::vector<WallShape>& walls,
+                       const std::vector<UnitVec>& neighbours,
+                       std::vector<std::pair<int, int>>& pairs) {
+    pairs.clear();
+    if (walls.size() == neighbours.size()) {
+        std::vector<int> wall_of;
+        if (!walls_of_neighbours(walls, neighbours, wall_of)) return false;
+        for (size_t n = 0; n < neighbours.size(); n++) {
+            pairs.push_back({static_cast<int>(n), wall_of[n]});
+        }
+        return true;
+    }
+    if (walls.size() < neighbours.size()) return false;
+    std::vector<int> nearest(walls.size(), -1);
+    std::vector<int> count(neighbours.size(), 0);
+    for (size_t w = 0; w < walls.size(); w++) {
+        double best = 1e300;
+        for (size_t n = 0; n < neighbours.size(); n++) {
+            const double d = arc_angle(walls[w].midpoint, neighbours[n]);
+            if (d < best) {
+                best = d;
+                nearest[w] = static_cast<int>(n);
+            }
+        }
+        count[nearest[w]]++;
+    }
+    for (size_t n = 0; n < neighbours.size(); n++) {
+        if (count[n] == 0) return false;
+        for (size_t w = 0; w < walls.size(); w++) {
+            if (nearest[w] == static_cast<int>(n)) pairs.push_back({static_cast<int>(n), static_cast<int>(w)});
+        }
+    }
+    return true;
+}
+
+// One row per measured wall: the cell (position in the input, from 1) and its
+// WallMeasure. The caller names the neighbour column in its own ID type.
+struct WallRows {
+    std::vector<double> cell, wall, centre_distance, midpoint_offset;
+
+    void add(R_xlen_t k, const WallMeasure& m) {
+        cell.push_back(static_cast<double>(k + 1));
+        wall.push_back(m.wall);
+        centre_distance.push_back(m.centre_distance);
+        midpoint_offset.push_back(m.midpoint_offset);
+    }
+
+    Rcpp::DataFrame frame(const char* neighbour_name, SEXP neighbour) const {
+        using Rcpp::NumericVector;
+        Rcpp::List cols = Rcpp::List::create(
+            Rcpp::Named("cell") = NumericVector(cell.begin(), cell.end()),
+            Rcpp::Named(neighbour_name) = neighbour,
+            Rcpp::Named("wall") = NumericVector(wall.begin(), wall.end()),
+            Rcpp::Named("centre_distance") =
+                NumericVector(centre_distance.begin(), centre_distance.end()),
+            Rcpp::Named("midpoint_offset") =
+                NumericVector(midpoint_offset.begin(), midpoint_offset.end()));
+        return Rcpp::DataFrame(cols);
+    }
+};
+
+} // namespace hexify
+
+#endif

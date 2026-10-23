@@ -2,7 +2,7 @@
 % Please edit documentation in R/hexify_conversions.R
 \name{hexify_lonlat_to_quad_ij}
 \alias{hexify_lonlat_to_quad_ij}
-\title{Convert longitude/latitude to Quad IJ coordinates}
+\title{Convert Longitude/Latitude to Quad IJ Coordinates}
 \usage{
 hexify_lonlat_to_quad_ij(lon, lat, resolution, aperture = 3L)
 }
@@ -11,7 +11,7 @@ hexify_lonlat_to_quad_ij(lon, lat, resolution, aperture = 3L)
 
 \item{lat}{Latitude in degrees (-90 to 90)}
 
-\item{resolution}{Grid resolution level (0-30)}
+\item{resolution}{Grid resolution level (0-30 for aperture 3, 0-29 for aperture 4, 0-21 for aperture 7)}
 
 \item{aperture}{Grid aperture: 3, 4, or 7}
 }
@@ -46,7 +46,6 @@ print(result)
 }
 \seealso{
 Other coordinate conversion:
-\code{\link[=hexify_cell_id_to_quad_ij]{hexify_cell_id_to_quad_ij()}},
 \code{\link[=hexify_cell_to_icosa_tri]{hexify_cell_to_icosa_tri()}},
 \code{\link[=hexify_cell_to_lonlat]{hexify_cell_to_lonlat()}},
 \code{\link[=hexify_cell_to_plane]{hexify_cell_to_plane()}},

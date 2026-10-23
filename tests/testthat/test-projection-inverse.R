@@ -4,9 +4,6 @@
 #
 # Functions tested:
 # - hexify_inverse()
-# - hexify_set_precision()
-# - hexify_get_precision()
-# - hexify_projection_stats()
 
 # =============================================================================
 # BASIC INVERSE PROJECTION
@@ -59,7 +56,6 @@ test_that("forward-inverse round-trip works near face centers", {
 test_that("forward-inverse round-trip works for random points", {
   skip_on_cran()
   hexify_build_icosa()
-  hexify_set_precision("high")
 
   set.seed(123)
 
@@ -84,98 +80,88 @@ test_that("forward-inverse round-trip works for random points", {
 })
 
 # =============================================================================
-# PRECISION SETTINGS
+# CLOSED FORM
 # =============================================================================
 
-test_that("precision presets are accepted", {
-  expect_no_error(hexify_set_precision("fast"))
-  expect_no_error(hexify_set_precision("default"))
-  expect_no_error(hexify_set_precision("high"))
-  expect_no_error(hexify_set_precision("ultra"))
-})
-
-test_that("get_precision returns valid values", {
-  hexify_set_precision("fast")
-  p <- hexify_get_precision()
-
-  expect_true("tol" %in% names(p))
-  expect_true("max_iters" %in% names(p))
-  expect_true(is.numeric(p["tol"]))
-  expect_true(is.numeric(p["max_iters"]))
-})
-
-test_that("precision settings affect iteration count", {
-  hexify_build_icosa()
-
-  hexify_set_precision("fast")
-  fast_precision <- hexify_get_precision()
-
-  hexify_set_precision("ultra")
-  ultra_precision <- hexify_get_precision()
-
-  # Ultra should have tighter tolerance or more iterations
-  expect_true(ultra_precision["tol"] <= fast_precision["tol"] ||
-                ultra_precision["max_iters"] >= fast_precision["max_iters"])
-})
-
-# =============================================================================
-# PROJECTION STATS
-# =============================================================================
-
-test_that("projection_stats returns valid structure", {
-  hexify_build_icosa()
-
-  # Perform some projections
-  for (i in 1:10) {
-    hexify_inverse(0.5, 0.3, 0)
+test_that("closed-form inverse agrees with Newton's method on every solid", {
+  skip_on_cran()
+  pts <- face_plane_samples()
+  cases <- list(c("isea", "icosahedron"), c("isea", "octahedron"),
+                c("isea", "tetrahedron"), c("fuller", "icosahedron"))
+  for (case in cases) {
+    solid <- case[2]
+    icosa <- projection_icosa(case[1], solid)
+    n_faces <- nrow(hexify_face_centers(solid))
+    for (face in unique(c(0L, n_faces %/% 2L, n_faces - 1L))) {
+      closed <- t(mapply(function(x, y) cpp_face_xy_to_ll(icosa, x, y, face),
+                         pts$x, pts$y))
+      newton <- t(mapply(function(x, y) cpp_face_xy_to_ll(icosa, x, y, face, newton = TRUE),
+                         pts$x, pts$y))
+      err <- arc_between(closed[, "lon"], closed[, "lat"],
+                         newton[, "lon"], newton[, "lat"])
+      expect_lt(max(err), 1e-13, label = sprintf("%s %s face %d", case[1], solid, face))
+    }
   }
-
-  stats <- hexify_projection_stats()
-
-  expect_true("calls" %in% names(stats))
-  expect_true("iters_total" %in% names(stats))
-  expect_true("iters_max" %in% names(stats))
 })
 
-test_that("projection_stats tracks calls", {
-  hexify_build_icosa()
-
-  # Reset stats
-  hexify_projection_stats()
-
-  # Perform known number of calls
-  n_calls <- 5
-  for (i in 1:n_calls) {
-    hexify_inverse(0.5, 0.3, 0)
+test_that("forward then closed-form inverse returns the point at machine precision", {
+  skip_on_cran()
+  set.seed(84)
+  lon <- runif(400, -180, 180)
+  lat <- asin(runif(400, -1, 1)) * 180 / pi
+  for (solid in c("icosahedron", "octahedron", "tetrahedron")) {
+    back <- t(mapply(function(lo, la) {
+      f <- hexify_forward(lo, la, polyhedron = solid)
+      hexify_inverse(f[["icosa_triangle_x"]], f[["icosa_triangle_y"]],
+                     as.integer(f[["face"]]), polyhedron = solid)
+    }, lon, lat))
+    err <- arc_between(lon, lat, back[, "lon"], back[, "lat"])
+    expect_lt(max(err), 1e-13, label = solid)
   }
-
-  stats <- hexify_projection_stats()
-  expect_equal(as.integer(stats["calls"]), n_calls)
 })
 
-# =============================================================================
-# HEXIFY_SET_VERBOSE
-# =============================================================================
+unit_rows <- function(m) m / sqrt(rowSums(m^2))
 
-test_that("hexify_set_verbose accepts TRUE and FALSE", {
-  expect_no_error(hexify_set_verbose(TRUE))
-  expect_no_error(hexify_set_verbose(FALSE))
+test_that("Snyder's map on a hemisphere split in four is Collignon's", {
+  # Recht (2021): with v0 the pole and v1, v2 on the equator a quarter turn
+  # apart, x = b1 + b2 = sqrt(2) sin(pi/4 - phi/2) and y = b2 - b1 = (4/pi) x lambda.
+  g <- expand.grid(lam = seq(-pi / 4, pi / 4, length.out = 41),
+                   phi = seq(0.001, pi / 2, length.out = 41))
+  v <- cbind(cos(g$phi) * cos(g$lam), cos(g$phi) * sin(g$lam), sin(g$phi))
+  b <- cpp_snyder_triangle_forward(c(0, 0, 1), c(1, -1, 0) / sqrt(2),
+                                   c(1, 1, 0) / sqrt(2), v)
+  x <- sqrt(2) * sin(pi / 4 - g$phi / 2)
+  expect_lt(max(abs(b[, 1] + b[, 2] - x)), 1e-14)
+  expect_lt(max(abs(b[, 2] - b[, 1] - 4 / pi * x * g$lam)), 1e-14)
 })
 
-# =============================================================================
-# CUSTOM PRECISION SETTINGS
-# =============================================================================
-
-test_that("hexify_set_precision accepts custom tol", {
-  expect_no_error(hexify_set_precision(tol = 1e-10))
+test_that("Snyder's map on a cube face is the COBE sky-cube formula", {
+  # Recht (2021): v0 = (0, 0, 1), v1 = (1, -1, 1)/sqrt(3), v2 = (1, 1, 1)/sqrt(3),
+  # b = sqrt(2 vx^2 + vy^2), x = sqrt(b (b + vx) / (1 + vz)),
+  # y = x (12/pi) atan(vy / (b + 2 vx)).
+  g <- expand.grid(X = seq(0.01, 1, length.out = 40), s = seq(-1, 1, length.out = 41))
+  v <- unit_rows(cbind(g$X, g$s * g$X, 1))
+  b <- cpp_snyder_triangle_forward(c(0, 0, 1), c(1, -1, 1) / sqrt(3),
+                                   c(1, 1, 1) / sqrt(3), v)
+  bb <- sqrt(2 * v[, 1]^2 + v[, 2]^2)
+  x <- sqrt(bb * (bb + v[, 1]) / (1 + v[, 3]))
+  y <- x * 12 / pi * atan(v[, 2] / (bb + 2 * v[, 1]))
+  expect_lt(max(abs(b[, 1] + b[, 2] - x)), 1e-14)
+  expect_lt(max(abs(b[, 2] - b[, 1] - y)), 1e-14)
 })
 
-test_that("hexify_set_precision accepts custom max_iters", {
-  expect_no_error(hexify_set_precision(max_iters = 50))
-})
-
-test_that("hexify_set_precision accepts both custom parameters", {
-  expect_no_error(hexify_set_precision(tol = 1e-12, max_iters = 100))
+test_that("Snyder's map inverts on irregular triangles of either orientation", {
+  set.seed(96)
+  for (k in 1:50) {
+    centre <- rnorm(3)
+    centre <- centre / sqrt(sum(centre^2))
+    tri <- unit_rows(matrix(centre, 3, 3, byrow = TRUE) + matrix(runif(9, -0.6, 0.6), 3))
+    b1 <- runif(60)
+    b2 <- runif(60) * (1 - b1)
+    v <- cpp_snyder_triangle_inverse(tri[1, ], tri[2, ], tri[3, ], cbind(b1, b2))
+    b <- cpp_snyder_triangle_forward(tri[1, ], tri[2, ], tri[3, ], v)
+    expect_lt(max(abs(b - cbind(b1, b2))), 1e-11)
+  }
 })
 
 # =============================================================================
@@ -247,28 +233,6 @@ test_that("hexify_which_face is consistent with hexify_forward", {
   }
 })
 
-# =============================================================================
-# HEXIFY_INVERSE WITH CUSTOM PARAMETERS
-# =============================================================================
-
-test_that("hexify_inverse with custom tol parameter", {
-  hexify_build_icosa()
-
-  result <- hexify_inverse(0.5, 0.3, face = 0, tol = 1e-10)
-
-  expect_true(is.finite(result["lon"]))
-  expect_true(is.finite(result["lat"]))
-})
-
-test_that("hexify_inverse with custom max_iters parameter", {
-  hexify_build_icosa()
-
-  result <- hexify_inverse(0.5, 0.3, face = 0, max_iters = 50)
-
-  expect_true(is.finite(result["lon"]))
-  expect_true(is.finite(result["lat"]))
-})
-
 test_that("hexify_inverse validates input lengths", {
   hexify_build_icosa()
 
@@ -286,7 +250,7 @@ test_that("cpp_icosa_face_params returns valid face parameters", {
   hexify_build_icosa()
 
   for (face in 0:19) {
-    params <- cpp_icosa_face_params(face)
+    params <- cpp_icosa_face_params(numeric(0), face)
 
     expect_true("cen_lat" %in% names(params))
     expect_true("cen_lon" %in% names(params))
@@ -300,17 +264,17 @@ test_that("cpp_icosa_face_params returns valid face parameters", {
 test_that("cpp_icosa_face_params errors on invalid face", {
   hexify_build_icosa()
 
-  expect_error(cpp_icosa_face_params(-1), "face must be 0..19")
-  expect_error(cpp_icosa_face_params(20), "face must be 0..19")
+  expect_error(cpp_icosa_face_params(numeric(0), -1), "face out of range")
+  expect_error(cpp_icosa_face_params(numeric(0), 20), "face out of range")
 })
 
 test_that("cpp_hex_index_face_to_lonlat works with degrees=TRUE", {
   hexify_build_icosa()
 
   # Get face 0 parameters
-  params <- cpp_icosa_face_params(0)
+  params <- cpp_icosa_face_params(numeric(0), 0)
 
-  result <- cpp_hex_index_face_to_lonlat(
+  result <- cpp_hex_index_face_to_lonlat(numeric(0), 
     x = 0.5,
     y = 0.3,
     cen_lat = params["cen_lat"],
@@ -328,9 +292,9 @@ test_that("cpp_hex_index_face_to_lonlat works with degrees=FALSE", {
   hexify_build_icosa()
 
   # Get face 0 parameters
-  params <- cpp_icosa_face_params(0)
+  params <- cpp_icosa_face_params(numeric(0), 0)
 
-  result <- cpp_hex_index_face_to_lonlat(
+  result <- cpp_hex_index_face_to_lonlat(numeric(0), 
     x = 0.5,
     y = 0.3,
     cen_lat = params["cen_lat"],
@@ -343,25 +307,4 @@ test_that("cpp_hex_index_face_to_lonlat works with degrees=FALSE", {
   # Radians: lon in [-pi, pi], lat in [-pi/2, pi/2]
   expect_true(result[1] >= -pi && result[1] <= pi)
   expect_true(result[2] >= -pi / 2 && result[2] <= pi / 2)
-})
-
-test_that("cpp_hex_index_face_to_lonlat works with custom tolerance", {
-  hexify_build_icosa()
-
-  params <- cpp_icosa_face_params(5)
-
-  result <- cpp_hex_index_face_to_lonlat(
-    x = 0.5,
-    y = 0.3,
-    cen_lat = params["cen_lat"],
-    cen_lon = params["cen_lon"],
-    face_azimuth_offset = params["face_azimuth_offset"],
-    degrees = TRUE,
-    tol = 1e-10,
-    max_iters = 50
-  )
-
-  expect_length(result, 2)
-  expect_true(is.finite(result[1]))
-  expect_true(is.finite(result[2]))
 })

@@ -2,7 +2,7 @@
 % Please edit documentation in R/hexify_conversions.R
 \name{hexify_quad_ij_to_icosa_tri}
 \alias{hexify_quad_ij_to_icosa_tri}
-\title{Convert Quad IJ to Icosa Triangle coordinates}
+\title{Convert Quad IJ to Icosa Triangle Coordinates}
 \usage{
 hexify_quad_ij_to_icosa_tri(quad, i, j, resolution, aperture = 3L)
 }
@@ -13,7 +13,7 @@ hexify_quad_ij_to_icosa_tri(quad, i, j, resolution, aperture = 3L)
 
 \item{j}{Cell index along second axis, integer or vector}
 
-\item{resolution}{Grid resolution level (0-30)}
+\item{resolution}{Grid resolution level (0-30 for aperture 3, 0-29 for aperture 4, 0-21 for aperture 7)}
 
 \item{aperture}{Grid aperture: 3, 4, or 7}
 }
@@ -42,7 +42,6 @@ print(result)
 \code{\link{hexify_cell_to_icosa_tri}} for conversion from cell ID
 
 Other coordinate conversion:
-\code{\link[=hexify_cell_id_to_quad_ij]{hexify_cell_id_to_quad_ij()}},
 \code{\link[=hexify_cell_to_icosa_tri]{hexify_cell_to_icosa_tri()}},
 \code{\link[=hexify_cell_to_lonlat]{hexify_cell_to_lonlat()}},
 \code{\link[=hexify_cell_to_plane]{hexify_cell_to_plane()}},

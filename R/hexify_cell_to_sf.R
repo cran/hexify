@@ -5,36 +5,23 @@
 # with sf integration for modern spatial workflows.
 
 # =============================================================================
-# INTERNAL HELPERS
-# =============================================================================
-
-#' Get resolution from area (internal)
-#' @noRd
-.resolution_from_area <- function(area, aperture) {
-  grid <- hexify_grid(area = area, aperture = as.integer(aperture),
-                      resround = "nearest")
-  grid$resolution
-}
-
-# =============================================================================
 # CORE POLYGON GENERATION
 # =============================================================================
 
-#' Convert cell IDs to sf polygons
+#' Convert Cell IDs to sf Polygons
 #'
 #' Creates polygon geometries for hexagonal grid cells from their cell IDs.
 #' Returns an sf object by default, or a data frame for lightweight workflows.
 #'
 #' @param cell_id Integer vector of cell identifiers
 #' @param resolution Grid resolution level. Can be omitted if grid is provided.
-#' @param aperture Grid aperture: 3, 4, or 7. Can be omitted if grid is provided.
+#' @param aperture Grid aperture: 3, 4, 7, or a mixed spelling as
+#'   \code{\link{hex_grid}} takes it. Can be omitted if grid is provided.
 #' @param return_sf Logical. If TRUE (default), returns sf object with polygon
 #'   geometries. If FALSE, returns data frame with vertex coordinates.
 #' @param grid Optional HexGridInfo object. If provided, resolution and aperture
 #'   are extracted from it.
-#' @param wrap_dateline Logical. If TRUE (default), calls
-#'   \code{sf::st_wrap_dateline()} to split antimeridian-crossing polygons.
-#'   Set to FALSE for orthographic/globe projections where wrapping creates gaps.
+#' @inheritParams cell_to_sf
 #'
 #' @return If return_sf = TRUE: sf object with columns:
 #'   \item{cell_id}{Cell identifier}
@@ -44,7 +31,8 @@
 #'   \item{cell_id}{Cell identifier}
 #'   \item{lon}{Vertex longitude}
 #'   \item{lat}{Vertex latitude}
-#'   \item{order}{Vertex order (1-7, 7 closes the polygon)}
+#'   \item{order}{Vertex order along the ring; the last vertex repeats the
+#'     first, closing the polygon}
 #'
 #' @details
 #' This function uses a native C++ implementation that is significantly faster
@@ -76,61 +64,34 @@ hexify_cell_to_sf <- function(cell_id, resolution = NULL, aperture = NULL,
                               return_sf = TRUE, grid = NULL,
                               wrap_dateline = TRUE) {
 
-  # Extract from grid if provided
   if (!is.null(grid)) {
     g <- extract_grid(grid)
-    # H3 grids: redirect to cell_to_sf() which handles H3 boundaries
-    if (is_h3_grid(g)) {
-      return(cell_to_sf(cell_id, g))
+  } else {
+    if (is.null(resolution) || is.null(aperture)) {
+      stop("resolution and aperture must be provided, or supply a grid object")
     }
-    resolution <- g@resolution
-    aperture <- as.integer(g@aperture)
+    g <- hex_grid(resolution = resolution, aperture = aperture)
   }
 
-  # Input validation
-  if (!is.numeric(cell_id)) {
-    stop("cell_id must be numeric (integer cell IDs)")
-  }
-  if (is.null(resolution) || is.null(aperture)) {
-    stop("resolution and aperture must be provided, or supply a grid object")
-  }
-  if (!aperture %in% c(3L, 4L, 7L)) {
-    stop("aperture must be 3, 4, or 7")
-  }
-  if (resolution < 0 || resolution > 30) {
-    stop("resolution must be between 0 and 30")
+  if (!is_h3_grid(g)) cell_id <- as_cell_id(cell_id)
+  if (is_h3_grid(g) || return_sf) {
+    return(cell_to_sf(cell_id, g, wrap_dateline = wrap_dateline))
   }
 
-  # Remove NA values and duplicates
   cell_id <- unique(cell_id[!is.na(cell_id)])
   if (length(cell_id) == 0) {
     stop("No valid cell_id values provided")
   }
 
-  aperture <- as.integer(aperture)
-  resolution <- as.integer(resolution)
-
-  if (return_sf) {
-    if (!requireNamespace("sf", quietly = TRUE)) {
-      stop("Package 'sf' is required for return_sf = TRUE. ",
-           "Install with: install.packages('sf')")
-    }
-
-    sfc <- isea_cells_to_sfc(cell_id, resolution, aperture)
-    result_sf <- sf::st_sf(cell_id = cell_id, geometry = sfc)
-    if (wrap_dateline) {
-      result_sf <- sf::st_wrap_dateline(result_sf,
-        options = c("WRAPDATELINE=YES", "DATELINEOFFSET=180"), quiet = TRUE)
-    }
-    result_sf
-
-  } else {
-    # Return data frame format
-    result <- cpp_cell_to_polygon(cell_id, resolution, aperture)
-    names(result) <- c("cell_id", "lon", "lat", "order")
-    result$cell_id <- as.integer(result$cell_id)
-    result
-  }
+  rings <- isea_cell_rings(cell_id, g@resolution, g@aperture, icosa_arg(g))
+  n_vertices <- vapply(rings, nrow, integer(1))
+  vertices <- do.call(rbind, rings)
+  data.frame(
+    cell_id = rep(cell_id, n_vertices),
+    lon = vertices[, 1],
+    lat = vertices[, 2],
+    order = sequence(n_vertices)
+  )
 }
 
 
@@ -138,7 +99,7 @@ hexify_cell_to_sf <- function(cell_id, resolution = NULL, aperture = NULL,
 # GRID GENERATION
 # =============================================================================
 
-#' Generate a rectangular grid of hexagon polygons
+#' Generate a Rectangular Grid of Hexagon Polygons
 #'
 #' Creates hexagon polygons covering a rectangular geographic region.
 #'
@@ -170,30 +131,12 @@ hexify_cell_to_sf <- function(cell_id, resolution = NULL, aperture = NULL,
 hexify_grid_rect <- function(minlon, maxlon, minlat, maxlat,
                              area, aperture = 3L, resround = "nearest",
                              radius_km = EARTH_RADIUS_KM) {
-
-  if (!requireNamespace("sf", quietly = TRUE)) {
-    stop("Package 'sf' is required. Install with: install.packages('sf')")
-  }
-
-  radius_km <- resolve_radius_km(radius_km)
-
-  # Create grid of sample points
-  diagonal <- sqrt(area * 2 / sqrt(3))
-  spacing_deg <- diagonal / km_per_degree(radius_km) * 0.8
-
-  lons <- seq(minlon, maxlon, by = spacing_deg)
-  lats <- seq(minlat, maxlat, by = spacing_deg)
-  grid_pts <- expand.grid(lon = lons, lat = lats)
-
-  # Assign to hexes and get polygons
-  result <- hexify(grid_pts, lon = "lon", lat = "lat", area_km2 = area,
-                   aperture = aperture, resround = resround,
+  grid <- hex_grid(area_km2 = area, aperture = aperture, resround = resround,
                    radius_km = radius_km)
-
-  cell_to_sf(grid = result)
+  grid_rect(c(minlon, minlat, maxlon, maxlat), grid)
 }
 
-#' Generate a global grid of hexagon polygons
+#' Generate a Global Grid of Hexagon Polygons
 #'
 #' Creates hexagon polygons covering a whole body.
 #'
@@ -219,43 +162,16 @@ hexify_grid_rect <- function(minlon, maxlon, minlat, maxlat,
 #' plot(st_geometry(global_grid), border = "gray")
 hexify_grid_global <- function(area, aperture = 3L, resround = "nearest",
                                radius_km = EARTH_RADIUS_KM) {
-
-  if (!requireNamespace("sf", quietly = TRUE)) {
-    stop("Package 'sf' is required. Install with: install.packages('sf')")
-  }
-
-  radius_km <- resolve_radius_km(radius_km)
-
-  # Estimate cell count
-  approx_cells <- body_surface_km2(radius_km) / area
-
-  if (approx_cells > 100000) {
-    warning(sprintf(
-      "This will generate approximately %.0f cells. Consider larger area.",
-      approx_cells
-    ))
-  }
-
-  # Generate dense sample points
-  diagonal <- sqrt(area * 2 / sqrt(3))
-  spacing_deg <- diagonal / km_per_degree(radius_km) * 0.7
-
-  lons <- seq(-180, 180, by = spacing_deg)
-  lats <- seq(-85, 85, by = spacing_deg)
-  grid_pts <- expand.grid(lon = lons, lat = lats)
-
-  result <- hexify(grid_pts, lon = "lon", lat = "lat", area_km2 = area,
-                   aperture = aperture, resround = resround,
+  grid <- hex_grid(area_km2 = area, aperture = aperture, resround = resround,
                    radius_km = radius_km)
-
-  cell_to_sf(grid = result)
+  grid_global(grid)
 }
 
 # =============================================================================
 # LOW-LEVEL SF HELPERS
 # =============================================================================
 
-#' Build an sf POLYGON from six (lon, lat) corner pairs
+#' Build an sf POLYGON from Six (lon, lat) Corner Pairs
 #'
 #' Low-level helper to create a single hexagon polygon from corner coordinates.
 #' Most users should use \code{\link{cell_to_sf}} instead.

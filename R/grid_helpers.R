@@ -5,75 +5,261 @@
 # to accept grid specifications, eliminating the need to repeat
 # aperture/resolution parameters.
 
-#' Normalize antimeridian-crossing polygon coordinates
+#' Make a ring's longitudes continuous
 #'
-#' Shifts longitudes of a ring's coordinate matrix so an antimeridian-crossing
-#' polygon becomes contiguous instead of spanning nearly the full -180 to 180
-#' range. Downstream `sf::st_wrap_dateline()` then splits it correctly for
-#' flat-map rendering.
+#' Adds or drops whole turns so that consecutive corners stay less than half a
+#' turn apart, which is how far apart they are on the sphere, and centres the
+#' result on the map. A ring crossing the antimeridian then runs past +/-180
+#' in one piece rather than jumping the width of the map, and
+#' `sf::st_wrap_dateline()` splits it at the seam.
 #'
-#' @param coords A 2+ column matrix whose first column is longitude
-#' @return The same matrix, with the longitude column normalized if the ring
-#'   crosses the antimeridian
+#' @param coords A 2+ column matrix whose first column is longitude, the first
+#'   corner repeated last
+#' @return The same matrix, with continuous longitudes
 #' @noRd
-normalize_antimeridian_coords <- function(coords) {
+unwrap_ring_longitudes <- function(coords) {
   lons <- coords[, 1]
-  lon_range <- max(lons, na.rm = TRUE) - min(lons, na.rm = TRUE)
-
-  if (lon_range > 180) {
-    # Polygon crosses antimeridian - normalize to be contiguous.
-    # Shift negative lons to 0-360 range.
-    lons[lons < 0] <- lons[lons < 0] + 360
-    coords[, 1] <- lons
-
-    # Now shift back to standard range, but keeping contiguity: if the
-    # centroid ends up > 180, shift everything by -360.
-    mean_lon <- mean(lons)
-    if (mean_lon > 180) {
-      coords[, 1] <- coords[, 1] - 360
-    }
+  n <- length(lons)
+  if (n < 2 || anyNA(lons)) {
+    return(coords)
   }
 
+  steps <- diff(lons)
+
+  # A step over a pole is half a turn either way. Take the way that closes the
+  # ring; the cell lies beside the pole rather than around it.
+  over_pole <- abs(abs(steps) - 180) < 1e-6
+  wrapped <- !over_pole & abs(steps) > 180
+  steps[wrapped] <- steps[wrapped] - 360 * sign(steps[wrapped])
+  if (sum(over_pole) == 1L) {
+    steps[over_pole] <- -sum(steps[!over_pole])
+  }
+
+  lons <- c(lons[1], lons[1] + cumsum(steps))
+
+  # The last corner is the first one, whole turns on: place it exactly, so that
+  # accumulated rounding cannot leave the ring open.
+  lons[n] <- lons[1] + 360 * round((lons[n] - lons[1]) / 360)
+
+  center <- (max(lons) + min(lons)) / 2
+  coords[, 1] <- lons - 360 * round(center / 360)
   coords
+}
+
+#' Latitude where a cell edge meets a meridian
+#'
+#' The edge is the great-circle arc between two corners. Defined for corners
+#' that are neither on the same meridian nor half a turn apart, which is every
+#' edge that meets a meridian at one point.
+#'
+#' @param lon1,lat1,lon2,lat2 The two corners, in degrees
+#' @param lon The meridian, in degrees on the same continuous scale
+#' @return The latitude in degrees
+#' @noRd
+edge_lat_at_lon <- function(lon1, lat1, lon2, lat2, lon) {
+  rad <- pi / 180
+  atan((tan(lat1 * rad) * sin((lon2 - lon) * rad) +
+        tan(lat2 * rad) * sin((lon - lon1) * rad)) /
+       sin((lon2 - lon1) * rad)) / rad
+}
+
+#' Close a ring that encircles a pole
+#'
+#' The corners of a cell holding a pole run once around the globe, so no lon/lat
+#' ring closes on them. Cutting the ring at the antimeridian and carrying the two
+#' ends up to the pole closes it around the cap the cell covers, within the map
+#' and without the seam-crossing a whole-globe ring would otherwise need.
+#'
+#' @param coords A 2+ column matrix with continuous longitudes, the first corner
+#'   repeated last
+#' @return The same matrix when the ring closes on its own, otherwise the ring
+#'   from -180 to 180 with its two polar corners
+#' @noRd
+close_ring_over_pole <- function(coords) {
+  n <- nrow(coords)
+  if (n < 4 || anyNA(coords[, 1])) {
+    return(coords)
+  }
+
+  lons <- coords[, 1]
+  winding <- lons[n] - lons[1]
+  pole <- sign(mean(coords[, 2]))
+  if (abs(abs(winding) - 360) > 1e-6 || pole == 0) {
+    return(coords)
+  }
+
+  # The ring spans one full turn, so the antimeridian nearest the middle of its
+  # longitude range is the one it crosses; find the edge that meets it
+  seam <- 180 + 360 * round(((max(lons) + min(lons)) / 2 - 180) / 360)
+  at <- which((lons[-n] - seam) * (lons[-1] - seam) <= 0 & lons[-n] != lons[-1])[1]
+  if (is.na(at)) {
+    return(coords)
+  }
+
+  opening <- coords[at, , drop = FALSE]
+  opening[, 1] <- seam
+  opening[, 2] <- edge_lat_at_lon(lons[at], coords[at, 2],
+                                  lons[at + 1L], coords[at + 1L, 2], seam)
+  closing <- opening
+  closing[, 1] <- seam + winding
+
+  # Walk from the seam once around, so the ring runs the width of the map
+  turned <- coords[seq_len(at), , drop = FALSE]
+  turned[, 1] <- turned[, 1] + winding
+  ring <- rbind(opening, coords[seq_len(n - 1L)[-seq_len(at)], , drop = FALSE],
+                turned, closing)
+  ring[, 1] <- ring[, 1] - seam - 180 * sign(winding)
+
+  caps <- ring[c(nrow(ring), 1L), , drop = FALSE]
+  caps[, 2] <- 90 * pole
+  rbind(ring, caps, ring[1, , drop = FALSE])
+}
+
+#' Give a ring a corner where it meets the antimeridian
+#'
+#' `sf::st_wrap_dateline()` cuts a ring at +/-180 and joins the cut ends along a
+#' line of constant latitude, which is not where the cell's own edge runs. A
+#' corner placed on the edge itself is where the cut belongs, so the two halves
+#' keep the cell's shape. An edge running over a pole meets the meridian at the
+#' pole.
+#'
+#' @param coords A 2+ column matrix with continuous longitudes
+#' @return The same matrix, with a corner inserted at each seam crossing
+#' @noRd
+insert_seam_corners <- function(coords) {
+  lons <- coords[, 1]
+  n <- nrow(coords)
+  if (n < 2 || anyNA(lons) || (min(lons) >= -180 && max(lons) <= 180)) {
+    return(coords)
+  }
+
+  pieces <- vector("list", 2L * n)
+  at <- 0L
+  for (i in seq_len(n - 1L)) {
+    pieces[[at <- at + 1L]] <- coords[i, , drop = FALSE]
+    over_pole <- abs(abs(lons[i + 1L] - lons[i]) - 180) < 1e-6
+
+    for (seam in c(-180, 180)) {
+      if ((lons[i] - seam) * (lons[i + 1L] - seam) >= 0) {
+        next
+      }
+      corner <- coords[i, , drop = FALSE]
+      corner[, 1] <- seam
+      corner[, 2] <- if (over_pole) {
+        90 * sign(coords[i, 2] + coords[i + 1L, 2])
+      } else {
+        edge_lat_at_lon(lons[i], coords[i, 2], lons[i + 1L], coords[i + 1L, 2], seam)
+      }
+      pieces[[at <- at + 1L]] <- corner
+    }
+  }
+  pieces[[at + 1L]] <- coords[n, , drop = FALSE]
+
+  do.call(rbind, pieces[seq_len(at + 1L)])
+}
+
+#' Prepare a spherical cell ring for a lon/lat polygon
+#'
+#' @param coords A 2+ column matrix whose first two columns are lon and lat
+#' @return The prepared coordinate matrix
+#' @noRd
+lonlat_ring_coords <- function(coords) {
+  insert_seam_corners(close_ring_over_pole(unwrap_ring_longitudes(coords)))
+}
+
+#' Split cells at the antimeridian
+#'
+#' Only cells reaching past +/-180 are handed to `sf::st_wrap_dateline()`, which
+#' cuts any segment half a turn wide and would otherwise also split a cell whose
+#' edge runs over a pole rather than over the seam.
+#'
+#' @param x An sf object of cell polygons with continuous longitudes
+#' @return The same object, with seam-crossing cells split in two
+#' @noRd
+wrap_cells_at_dateline <- function(x) {
+  crossing <- vapply(sf::st_geometry(x), function(g) {
+    lons <- sf::st_coordinates(g)[, 1]
+    length(lons) > 0 && (min(lons) < -180 || max(lons) > 180)
+  }, logical(1))
+
+  if (any(crossing)) {
+    wrapped <- sf::st_wrap_dateline(x[crossing, ],
+      options = c("WRAPDATELINE=YES", "DATELINEOFFSET=180"), quiet = TRUE)
+    sf::st_geometry(x)[crossing] <- sf::st_geometry(wrapped)
+  }
+  x
+}
+
+#' Bring every corner of whole cells into -180..180
+#'
+#' A cell left whole across the antimeridian runs past +/-180, and a cell
+#' winding close around a pole can span most of a turn, more than the -180..360
+#' range sf reads as lon/lat allows. On the sphere a corner is the same point
+#' whole turns on, and s2 joins corners by great-circle arcs whatever their
+#' longitudes, so each corner is moved into -180..180 on its own. The polygon
+#' is unchanged on the sphere; on a flat lon/lat plane a cell crossing the
+#' antimeridian then spans the map, which is what the dateline split avoids.
+#'
+#' @param sfc An sfc of cell polygons
+#' @return The same sfc, every longitude in -180..180
+#' @noRd
+wrap_cell_corners <- function(sfc) {
+  geoms <- lapply(sfc, function(p) {
+    sf::st_polygon(lapply(unclass(p), function(r) {
+      r[, 1] <- r[, 1] - 360 * round(r[, 1] / 360)
+      r
+    }))
+  })
+  sf::st_sfc(geoms, crs = sf::st_crs(sfc))
+}
+
+#' Boundaries of ISEA cells as closed lon/lat rings
+#'
+#' Each edge follows the true cell boundary to within `tolerance` of its
+#' length, and no drawn piece spans an arc longer than `max_arc` radians;
+#' both 0 give the corners alone.
+#' @noRd
+isea_cell_rings <- function(cell_id, resolution, aperture, icosa,
+                            tolerance = CELL_EDGE_TOLERANCE, max_arc = 0) {
+  lv <- isea_levels(aperture, resolution)
+  cpp_cell_to_corners(icosa, as_cell_id(cell_id), lv$resolution, lv$aperture,
+                      lv$ap_seq, tolerance, max_arc)
 }
 
 #' Build hexagon polygons for ISEA cell IDs
 #'
-#' Antimeridian-crossing rings are normalized so each polygon is contiguous;
-#' callers that render on a flat map pass the result through
+#' Each edge follows the true cell boundary to within `CELL_EDGE_TOLERANCE`.
+#' Rings are prepared with `lonlat_ring_coords()` so each polygon is
+#' contiguous; callers that render on a flat map pass the result through
 #' `sf::st_wrap_dateline()` to split them at +/-180.
 #'
-#' @param cell_id Numeric vector of cell IDs
+#' @param cell_id Cell IDs (integer64, or any form as_cell_id() reads)
 #' @param resolution Grid resolution level
 #' @param aperture Grid aperture: 3, 4, 7, or a mixed sequence spelling
+#' @param icosa Orientation argument of the C++ layer (see icosa_arg())
 #' @param crs CRS the polygons carry, as sf reads it
+#' @param tolerance,max_arc Edge limits, as for `isea_cell_rings()`
 #' @return An sfc of POLYGON geometries, one per cell ID, in input order
 #' @noRd
-isea_cells_to_sfc <- function(cell_id, resolution, aperture, crs = 4326) {
-  corners_list <- if (is_mixed_aperture(aperture)) {
-    mixed_cell_corners(cell_id, resolution, aperture)
-  } else {
-    cpp_cell_to_corners(
-      as.numeric(cell_id),
-      as.integer(resolution),
-      as.integer(aperture)
-    )
-  }
+isea_cells_to_sfc <- function(cell_id, resolution, aperture, icosa, crs = 4326,
+                              tolerance = CELL_EDGE_TOLERANCE, max_arc = 0) {
+  corners_list <- isea_cell_rings(cell_id, resolution, aperture, icosa,
+                                  tolerance, max_arc)
 
   polygons <- lapply(corners_list, function(coords) {
-    sf::st_polygon(list(normalize_antimeridian_coords(coords)))
+    sf::st_polygon(list(lonlat_ring_coords(coords)))
   })
 
-  # suppressWarnings: antimeridian normalization may temporarily produce
-  # out-of-range longitudes that st_wrap_dateline corrects downstream
-  suppressWarnings(sf::st_make_valid(sf::st_sfc(polygons, crs = crs)))
+  # A ring that crosses the antimeridian or runs over a pole carries longitudes
+  # outside -180..180; st_wrap_dateline() brings those back inside the map.
+  sf::st_sfc(polygons, crs = crs)
 }
 
 # =============================================================================
 # COORDINATE CONVERSION HELPERS
 # =============================================================================
 
-#' Convert longitude/latitude to cell ID
+#' Convert Longitude/Latitude to Cell ID
 #'
 #' Converts geographic coordinates to DGGS cell IDs using a grid specification.
 #'
@@ -81,9 +267,15 @@ isea_cells_to_sfc <- function(cell_id, resolution, aperture, crs = 4326) {
 #' @param lat Numeric vector of latitudes in degrees
 #' @param grid A HexGridInfo or HexData object, or legacy hexify_grid
 #'
-#' @return Numeric vector of cell IDs
+#' @return Cell IDs: a \code{bit64::integer64} vector for an ISEA grid, a
+#'   character vector of H3 indices for an H3 grid
 #'
 #' @details
+#' ISEA cell IDs number a grid's cells from 1 and pass 2^53, the largest whole
+#' number a double holds exactly, at fine resolutions, so they are returned
+#' as 64-bit integers. Functions taking cell IDs also accept whole numbers
+#' below 2^53 and character strings of digits.
+#'
 #' This function accepts either a HexGridInfo object from \code{hex_grid()} or
 #' a HexData object from \code{hexify()}. If a HexData object is provided,
 #' its grid specification is extracted automatically.
@@ -107,27 +299,17 @@ lonlat_to_cell <- function(lon, lat, grid) {
     return(cpp_h3_latLngToCell(as.numeric(lon), as.numeric(lat), g@resolution))
   }
 
-  if (is_mixed_aperture(g@aperture)) {
-    cpp_lonlat_to_cell_seq(
-      as.numeric(lon),
-      as.numeric(lat),
-      grid_ap_seq(g)
-    )
-  } else {
-    cpp_lonlat_to_cell(
-      as.numeric(lon),
-      as.numeric(lat),
-      g@resolution,
-      as.integer(g@aperture)
-    )
-  }
+  lv <- isea_levels(g@aperture, g@resolution)
+  cpp_lonlat_to_cell(icosa_arg(g), as.numeric(lon), as.numeric(lat),
+                     lv$resolution, lv$aperture, lv$ap_seq)
 }
 
-#' Convert cell ID to longitude/latitude
+#' Convert Cell ID to Longitude/Latitude
 #'
 #' Converts DGGS cell IDs back to geographic coordinates (cell centers).
 #'
-#' @param cell_id Numeric vector of cell IDs
+#' @param cell_id Cell IDs: integer64 for ISEA grids (whole numbers below
+#'   2^53 and digit strings are accepted), character for H3 grids
 #' @param grid A HexGridInfo or HexData object
 #'
 #' @return Data frame with lon_deg and lat_deg columns
@@ -147,31 +329,46 @@ cell_to_lonlat <- function(cell_id, grid) {
     return(data.frame(lon_deg = result$lon, lat_deg = result$lat))
   }
 
-  if (is_mixed_aperture(g@aperture)) {
-    cpp_cell_to_lonlat_seq(
-      as.numeric(cell_id),
-      grid_ap_seq(g)
-    )
-  } else {
-    cpp_cell_to_lonlat(
-      as.numeric(cell_id),
-      g@resolution,
-      as.integer(g@aperture)
-    )
-  }
+  lv <- isea_levels(g@aperture, g@resolution)
+  cpp_cell_to_lonlat(icosa_arg(g), as_cell_id(cell_id),
+                     lv$resolution, lv$aperture, lv$ap_seq)
 }
 
-#' Convert cell IDs to sf polygons
+#' Convert Cell IDs to sf Polygons
 #'
 #' Creates sf polygon geometries for hexagonal grid cells.
 #'
-#' @param cell_id Numeric vector of cell IDs. If NULL and x is HexData,
+#' @param cell_id Cell IDs (integer64 for ISEA, character for H3). If NULL and x is HexData,
 #'   uses cells from x.
 #' @param grid A HexGridInfo or HexData object. If HexData and cell_id is NULL,
 #'   polygons are generated for all cells in the data.
 #' @param wrap_dateline Logical. If TRUE (default), calls
-#'   \code{sf::st_wrap_dateline()} to split antimeridian-crossing polygons.
-#'   Set to FALSE for orthographic/globe projections where wrapping creates gaps.
+#'   \code{sf::st_wrap_dateline()} to split antimeridian-crossing polygons,
+#'   which flat maps and planar (GEOS) operations need.
+#'   Set to FALSE for orthographic/globe projections where wrapping creates gaps,
+#'   and for spherical (s2) operations: each cell then stays one polygon whose
+#'   corners lie in -180..180, so a cell crossing the antimeridian spans a
+#'   flat lon/lat map.
+#' @param densify Points added along each cell edge: every edge is halved
+#'   until the straight line in longitude and latitude between consecutive
+#'   points stays within \code{densify} times its length of the true edge.
+#'   \code{0} keeps the corners alone. \code{NULL} uses 0.001 for ISEA cells
+#'   and 0 for H3 cells.
+#' @param max_km Longest edge piece, in km on the grid's sphere: edges are
+#'   halved further until no straight piece between consecutive points spans
+#'   more than \code{max_km}, on top of \code{densify}. \code{NULL} (default)
+#'   sets no limit. The bound \code{densify} sets is relative to each piece's
+#'   length, so a long, gently curved edge can stand as one piece that strays
+#'   hundreds of metres from the true edge; \code{max_km} bounds that in
+#'   distance.
+#' @param shape \code{"hexagon"} (default) draws each cell's own boundary.
+#'   \code{"gosper"} draws it as a Gosper island and \code{"descendants"} as
+#'   the outline of its descendants; both need an ISEA grid, and
+#'   \code{"descendants"} one of aperture 7. See Details.
+#' @param depth For \code{shape = "gosper"}, the number of times each edge is
+#'   replaced, multiplying its segments by 3; for \code{"descendants"}, the
+#'   number of resolutions down, multiplying the cells behind one outline
+#'   by 7.
 #'
 #' @return sf object with cell_id and geometry columns
 #'
@@ -180,8 +377,35 @@ cell_to_lonlat <- function(cell_id, grid) {
 #' generates polygons for all unique cells in the data, which is useful for
 #' plotting.
 #'
+#' An ISEA cell edge is straight on its icosahedron face and curved in
+#' longitude and latitude, so ISEA polygons are densified by default. An H3
+#' cell edge is a great-circle arc between corners, which sf reads exactly
+#' from the corners alone when it uses s2; densify H3 cells for planar work,
+#' or to draw them on a flat map.
+#'
+#' A Gosper island replaces every cell edge by three segments
+#' \eqn{1/\sqrt{7}} as long, turned by \eqn{\arctan(\sqrt{3}/5)}, and repeats
+#' this \code{depth} times; its outline approaches the flowsnake. The
+#' replacement is drawn on the face plane of the projection and moves as much
+#' area out of a cell as into it, so on an equal-area grid an island has
+#' exactly its cell's area, and neighbouring islands share their boundary, so
+#' the islands of a grid tile the sphere. The twelve pentagonal cells give
+#' five-sided islands.
+#'
+#' The descendant outline of an aperture-7 cell is the boundary of its
+#' descendants \code{depth} resolutions down. It covers exactly the cell's
+#' area, the outlines of one resolution tile the sphere, and an outline is the
+#' union of its children's outlines, so they nest across resolutions. The
+#' child lattice of an aperture-7 ISEA grid turns one way at one resolution and
+#' back at the next, so the outline stays close to the hexagon rather than
+#' approaching a Gosper island.
+#'
+#' Either shape is drawn around the cell's hexagon: a point near the boundary
+#' can lie in one cell's shape and be assigned to the neighbouring cell by
+#' \code{\link{lonlat_to_cell}}.
+#'
 #' @seealso \code{\link{hex_grid}} for grid specifications,
-#'   \code{\link{as_sf}} for converting HexData to sf
+#'   \code{\link[=st_as_sf.HexData]{st_as_sf}} for converting HexData to sf
 #'
 #' @export
 #' @examples
@@ -194,25 +418,39 @@ cell_to_lonlat <- function(cell_id, grid) {
 #' df <- data.frame(lon = c(0, 10, 20), lat = c(45, 50, 55))
 #' result <- hexify(df, lon = "lon", lat = "lat", area_km2 = 1000)
 #' polys <- cell_to_sf(grid = result)
-cell_to_sf <- function(cell_id = NULL, grid, wrap_dateline = TRUE) {
+#'
+#' # Cells drawn as Gosper islands, and as the outline of their descendants
+#' g7 <- hex_grid(resolution = 3, aperture = 7)
+#' cells <- lonlat_to_cell(c(0, 10), c(45, 50), g7)
+#' islands <- cell_to_sf(cells, g7, shape = "gosper", depth = 3)
+#' outlines <- cell_to_sf(cells, g7, shape = "descendants", depth = 2)
+cell_to_sf <- function(cell_id = NULL, grid, wrap_dateline = TRUE,
+                       densify = NULL, max_km = NULL,
+                       shape = c("hexagon", "gosper", "descendants"),
+                       depth = 3L) {
   if (!requireNamespace("sf", quietly = TRUE)) {
     stop("Package 'sf' is required. Install with: install.packages('sf')")
   }
+  if (!is.null(densify) && (!is.numeric(densify) || length(densify) != 1L ||
+                            !is.finite(densify) || densify < 0)) {
+    stop("densify must be NULL or a single non-negative number")
+  }
+  if (!is.null(max_km) && (!is.numeric(max_km) || length(max_km) != 1L ||
+                           !is.finite(max_km) || max_km <= 0)) {
+    stop("max_km must be NULL or a single positive number")
+  }
+  shape <- match.arg(shape)
 
-  # Handle HexData input
-  if (is_hex_data(grid)) {
-    if (is.null(cell_id)) {
-      cell_id <- unique(grid@cell_id)
-    }
-    g <- grid@grid
-  } else {
-    g <- extract_grid(grid)
-    if (is.null(cell_id)) {
-      stop("cell_id required when grid is not HexData")
-    }
+  resolved <- resolve_cells_grid(cell_id, grid)
+  cell_id <- resolved$cell_id
+  g <- resolved$grid
+  max_arc <- if (is.null(max_km)) 0 else max_km / grid_radius_km(g)
+  if (shape != "hexagon") {
+    depth <- cell_shape_depth(g, shape, depth)
   }
 
   # Remove NA and duplicates
+  if (!is_h3_grid(g)) cell_id <- as_cell_id(cell_id)
   cell_id <- unique(cell_id[!is.na(cell_id)])
   if (length(cell_id) == 0) {
     stop("No valid cell_id values")
@@ -221,43 +459,47 @@ cell_to_sf <- function(cell_id = NULL, grid, wrap_dateline = TRUE) {
   # H3 path: use native C backend for boundaries
   if (is_h3_grid(g)) {
     boundaries <- cpp_h3_cellToBoundary(as.character(cell_id))
+    h3_tolerance <- if (is.null(densify)) 0 else densify
+    if (h3_tolerance > 0 || max_arc > 0) {
+      boundaries <- cpp_densify_great_circle(boundaries, h3_tolerance, max_arc)
+    }
     polygons <- lapply(boundaries, function(coords) {
       if (nrow(coords) == 0) return(sf::st_polygon())
-      coords <- normalize_antimeridian_coords(coords)
+      coords <- lonlat_ring_coords(coords)
       sf::st_polygon(list(coords))
     })
     sfc <- sf::st_sfc(polygons, crs = grid_crs(g))
-    sfc <- suppressWarnings(sf::st_make_valid(sfc))
-    result_sf <- sf::st_sf(cell_id = as.character(cell_id), geometry = sfc)
-    if (wrap_dateline) {
-      result_sf <- sf::st_wrap_dateline(result_sf,
-        options = c("WRAPDATELINE=YES", "DATELINEOFFSET=180"), quiet = TRUE)
+    cell_id <- as.character(cell_id)
+  } else {
+    # ISEA path: generate polygons using C++ function. For globe/orthographic
+    # projections, pass wrap_dateline = FALSE to keep cells intact.
+    tolerance <- if (is.null(densify)) CELL_EDGE_TOLERANCE else densify
+    sfc <- if (shape == "hexagon") {
+      isea_cells_to_sfc(cell_id, g@resolution, g@aperture, icosa_arg(g),
+                        crs = grid_crs(g), tolerance = tolerance,
+                        max_arc = max_arc)
+    } else {
+      shaped_cells_to_sfc(cell_id, g, shape, depth, tolerance, max_arc)
     }
-    return(result_sf)
   }
 
-  # ISEA path: generate polygons using C++ function. For globe/orthographic
-  # projections, pass wrap_dateline = FALSE to keep cells intact.
-  sfc <- isea_cells_to_sfc(cell_id, g@resolution, g@aperture,
-                           crs = grid_crs(g))
-
-  result_sf <- sf::st_sf(cell_id = cell_id, geometry = sfc)
   if (wrap_dateline) {
-    result_sf <- sf::st_wrap_dateline(result_sf,
-      options = c("WRAPDATELINE=YES", "DATELINEOFFSET=180"), quiet = TRUE)
+    wrap_cells_at_dateline(sf::st_sf(cell_id = cell_id, geometry = sfc))
+  } else {
+    sf::st_sf(cell_id = cell_id,
+              geometry = wrap_cell_corners(sfc))
   }
-  result_sf
 }
 
 # =============================================================================
 # GRID GENERATION HELPERS
 # =============================================================================
 
-#' Generate a rectangular grid of hexagons
+#' Generate a Rectangular Grid of Hexagons
 #'
 #' Creates hexagon polygons covering a rectangular geographic region.
-#' For H3 grids, all cells that overlap the bounding box are included
-#' (not just cells whose center falls inside), ensuring full spatial coverage.
+#' All cells that overlap the bounding box are included (not just cells whose
+#' center falls inside), ensuring full spatial coverage on both backends.
 #'
 #' @param bbox Bounding box as c(xmin, ymin, xmax, ymax), or an sf/sfc object
 #' @param grid A HexGridInfo object specifying the grid parameters
@@ -304,36 +546,99 @@ grid_rect <- function(bbox, grid) {
   maxlon <- bbox[3]
   maxlat <- bbox[4]
 
-  # Create sampling grid - use diagonal_km from grid if available
-  diagonal <- if (!is.na(g@diagonal_km)) g@diagonal_km else sqrt(g@area_km2 * 2 / sqrt(3))
-  spacing_deg <- diagonal / km_per_degree(grid_radius_km(g)) * 0.8
+  # Seed with the cells of a point lattice over the box, far edges included
+  spacing_deg <- hex_spacing_km(g@area_km2) / km_per_degree(grid_radius_km(g)) * 0.8
 
-  lons <- seq(minlon, maxlon, by = spacing_deg)
-  lats <- seq(minlat, maxlat, by = spacing_deg)
+  lons <- unique(c(seq(minlon, maxlon, by = spacing_deg), maxlon))
+  lats <- unique(c(seq(minlat, maxlat, by = spacing_deg), maxlat))
   grid_pts <- expand.grid(lon = lons, lat = lats)
+  seeds <- unique(lonlat_to_cell(grid_pts$lon, grid_pts$lat, g))
 
-  # Get unique cells covering the region
-  cell_ids <- lonlat_to_cell(grid_pts$lon, grid_pts$lat, g)
-  unique_cells <- unique(cell_ids)
-
-  cell_to_sf(unique_cells, g)
+  cell_ids <- isea_cells_meeting_box(seeds, c(minlon, minlat, maxlon, maxlat), g)
+  cell_to_sf(cell_ids, g)
 }
 
-#' Generate a global hexagon grid
+#' Switch sf's spherical geometry (s2) on or off until the calling function
+#' returns, without sf's switch messages
+#' @param use TRUE for s2, FALSE for planar geometry
+#' @param frame Frame whose exit restores the previous setting
+#' @noRd
+local_s2 <- function(use, frame = parent.frame()) {
+  old <- suppressMessages(sf::sf_use_s2(use))
+  do.call(on.exit, list(bquote(suppressMessages(sf::sf_use_s2(.(old)))),
+                        add = TRUE), envir = frame)
+  invisible(old)
+}
+
+#' Evaluate a planar sf operation on lon/lat geometry without sf's
+#' planar-assumption messages and warnings
+#' @noRd
+sf_planar <- function(expr) {
+  suppressMessages(suppressWarnings(expr))
+}
+
+#' Close a set of ISEA cells over the cells meeting a lon/lat box
+#'
+#' The cells whose polygon meets a rectangle form one edge-connected set, so
+#' growing from any member through neighbours that meet the box reaches all of
+#' them, independent of how the seeds were sampled.
+#'
+#' @param seeds Cell IDs known to meet the box
+#' @param bbox c(xmin, ymin, xmax, ymax)
+#' @param g HexGridInfo object
+#' @return integer64 vector of cell IDs
+#' @noRd
+isea_cells_meeting_box <- function(seeds, bbox, g) {
+  local_s2(FALSE)
+  box <- sf::st_as_sfc(sf::st_bbox(
+    c(xmin = bbox[1], ymin = bbox[2], xmax = bbox[3], ymax = bbox[4]),
+    crs = grid_crs(g)))
+
+  members <- seeds
+  tested <- seeds
+  frontier <- seeds
+  while (length(frontier) > 0L) {
+    candidates <- setdiff(unique(cell_id_unlist(grid_neighbors_isea(frontier, g))),
+                          tested)
+    candidates <- candidates[!is.na(candidates)]
+    if (length(candidates) == 0L) break
+    tested <- c(tested, candidates)
+    hit <- lengths(suppressMessages(sf::st_intersects(
+      sf::st_geometry(cell_to_sf(candidates, g)), box))) > 0L
+    frontier <- candidates[hit]
+    members <- c(members, frontier)
+  }
+  members
+}
+
+#' Every H3 cell at a resolution
+#'
+#' H3 has 122 base cells. The index of base cell b at resolution 0 sets the
+#' mode nibble to 1, the 7-bit base cell field (bits 45-51) to b, and every
+#' digit to 7; its children at the target resolution are the whole grid.
+#' @param resolution H3 resolution, 0-15
+#' @return Character vector of H3 cell indices
+#' @noRd
+h3_all_cells <- function(resolution) {
+  b <- 0:121
+  base <- sprintf("80%x%xfffffffffff", b %/% 8L, (b %% 8L) * 2L + 1L)
+  if (resolution == 0L) return(base)
+  unlist(cpp_h3_cellToChildren(base, as.integer(resolution)), use.names = FALSE)
+}
+
+#' Generate a Global Hexagon Grid
 #'
 #' Creates hexagon polygons covering the entire Earth.
 #'
 #' @param grid A HexGridInfo object specifying the grid parameters
-#' @param wrap_dateline Logical. If TRUE (default), antimeridian-crossing
-#'   polygons are split at +/-180 degrees. Set to FALSE for orthographic/globe
-#'   projections where wrapping creates gaps.
+#' @inheritParams cell_to_sf
 #'
 #' @return sf object with hexagon polygons
 #'
 #' @details
-#' This function generates a complete global grid by sampling points
-#' densely across the globe. For large grids (many small cells),
-#' consider using \code{grid_rect()} to generate regional subsets.
+#' Every cell of the grid, one row each, in cell ID order for ISEA grids.
+#' For large grids (many small cells), consider using \code{grid_rect()} to
+#' generate regional subsets.
 #'
 #' @seealso \code{\link{grid_rect}} for regional grids
 #'
@@ -352,31 +657,18 @@ grid_global <- function(grid, wrap_dateline = TRUE) {
 
   # H3 path: fill globe using native C backend
   if (is_h3_grid(g)) {
-    h3_n_cells <- 2 + 120 * 7^g@resolution
-    if (h3_n_cells > 2e6) {
+    n_cells <- h3_n_cells(g@resolution)
+    if (n_cells > 2e6) {
       warning(sprintf(
         "H3 global grid at res %d has ~%.0f cells. This may take a while.",
-        g@resolution, h3_n_cells
+        g@resolution, n_cells
       ))
     }
-    # Split globe into quadrants for polygonToCells
-    quads <- list(
-      matrix(c(-180, 0, 0, 0, 0, 90, -180, 90, -180, 0), ncol = 2, byrow = TRUE),
-      matrix(c(0, 0, 180, 0, 180, 90, 0, 90, 0, 0), ncol = 2, byrow = TRUE),
-      matrix(c(-180, -90, 0, -90, 0, 0, -180, 0, -180, -90), ncol = 2, byrow = TRUE),
-      matrix(c(0, -90, 180, -90, 180, 0, 0, 0, 0, -90), ncol = 2, byrow = TRUE)
-    )
-    all_cells <- character(0)
-    for (q in quads) {
-      quad_cells <- cpp_h3_polygonToCells(q, g@resolution)
-      all_cells <- c(all_cells, quad_cells)
-    }
-    cell_ids <- unique(all_cells)
-    return(cell_to_sf(cell_ids, g, wrap_dateline = wrap_dateline))
+    return(cell_to_sf(h3_all_cells(g@resolution), g, wrap_dateline = wrap_dateline))
   }
 
   # Estimate cell count for warning (ISEA)
-  n_cells <- aperture_n_cells(g@aperture, g@resolution)
+  n_cells <- grid_n_cells(g)
   if (n_cells > 100000) {
     warning(sprintf(
       "This will generate approximately %.0f cells. Consider larger area_km2.",
@@ -384,34 +676,11 @@ grid_global <- function(grid, wrap_dateline = TRUE) {
     ))
   }
 
-  # Dense sampling - use diagonal_km from grid if available
-  diagonal <- if (!is.na(g@diagonal_km)) g@diagonal_km else sqrt(g@area_km2 * 2 / sqrt(3))
-  spacing_deg <- diagonal / km_per_degree(grid_radius_km(g)) * 0.7
-
-  lons <- seq(-180, 180, by = spacing_deg)
-  lats <- seq(-85, 85, by = spacing_deg)
-  grid_pts <- expand.grid(lon = lons, lat = lats)
-
-  # Add polar cap sampling (±85 to ±90 degrees)
-  # The regular grid misses polar cells because lat stops at ±85
-  # Near poles, longitude spacing must be DENSER not coarser - at 89°N,
-  # the entire circumference is only ~6.3° of longitude-equivalent distance.
-  # Use the same spacing_deg (or denser) to ensure we catch all cells.
-  polar_lon_spacing <- min(spacing_deg, 15)  # At most 15°, or cell-based spacing
-  polar_lons <- seq(-180, 180, by = polar_lon_spacing)
-  polar_lats <- c(seq(85.5, 89.99, by = 0.5), seq(-89.99, -85.5, by = 0.5))
-  polar_pts <- expand.grid(lon = polar_lons, lat = polar_lats)
-
-  # Combine main grid with polar samples
-  grid_pts <- rbind(grid_pts, polar_pts)
-
-  cell_ids <- lonlat_to_cell(grid_pts$lon, grid_pts$lat, g)
-  unique_cells <- unique(cell_ids)
-
-  cell_to_sf(unique_cells, g, wrap_dateline = wrap_dateline)
+  # ISEA cell IDs number the grid's cells 1..n
+  cell_to_sf(as_cell_id(seq_len(n_cells)), g, wrap_dateline = wrap_dateline)
 }
 
-#' Clip hexagon grid to polygon boundary
+#' Clip Hexagon Grid to Polygon Boundary
 #'
 #' Creates hexagon polygons clipped to a given polygon boundary. This is useful
 #' for generating grids that conform to country borders, study areas, or other
@@ -442,8 +711,12 @@ grid_global <- function(grid, wrap_dateline = TRUE) {
 #' @export
 #' @examples
 #' \donttest{
-#' # Get France boundary from built-in world map
-#' france <- hexify_world[hexify_world$name == "France", ]
+#' # Metropolitan France: the world map also carries the overseas departements,
+#' # and grid_clip() covers the bounding box of whatever it is given.
+#' france <- sf::st_crop(
+#'   sf::st_geometry(hexify_world[hexify_world$name == "France", ]),
+#'   c(xmin = -5, ymin = 41, xmax = 10, ymax = 52)
+#' )
 #'
 #' # Create grid clipped to France
 #' grid <- hex_grid(area_km2 = 2000)
@@ -471,19 +744,19 @@ grid_clip <- function(boundary, grid, crop = TRUE) {
   }
 
   g <- extract_grid(grid)
+  boundary <- geometry_in_crs(boundary, grid_crs(g), "grid_clip",
+                              "the boundary", "grid")
 
   # H3 path: fill boundary polygon using native C backend
   if (is_h3_grid(g)) {
     # Disable S2 for spatial operations
-    s2_state <- sf::sf_use_s2()
-    sf::sf_use_s2(FALSE)
-    on.exit(sf::sf_use_s2(s2_state), add = TRUE)
+    local_s2(FALSE)
 
     boundary_geom <- sf::st_geometry(boundary)
     if (length(boundary_geom) > 1) {
-      boundary_geom <- sf::st_union(boundary_geom)
+      boundary_geom <- sf_planar(sf::st_union(boundary_geom))
     }
-    boundary_geom <- sf::st_make_valid(boundary_geom)
+    boundary_geom <- sf_planar(sf::st_make_valid(boundary_geom))
 
     # Extract polygon rings for cpp_h3_polygonToCells
     polys <- sf::st_cast(boundary_geom, "POLYGON")
@@ -499,13 +772,13 @@ grid_clip <- function(boundary, grid, crop = TRUE) {
     hex_sf <- cell_to_sf(cell_ids, g)
 
     if (crop) {
-      hex_sf <- sf::st_make_valid(hex_sf)
+      hex_sf <- sf_planar(sf::st_make_valid(hex_sf))
       result <- tryCatch({
-        suppressWarnings(sf::st_intersection(hex_sf, boundary_geom))
+        sf_planar(sf::st_intersection(hex_sf, boundary_geom))
       }, error = function(e) {
         boundary_buf <- sf::st_buffer(boundary_geom, 0)
         hex_buf <- sf::st_buffer(hex_sf, 0)
-        suppressWarnings(sf::st_intersection(hex_buf, boundary_buf))
+        sf_planar(sf::st_intersection(hex_buf, boundary_buf))
       })
       geom_types <- sf::st_geometry_type(result)
       result <- result[geom_types %in% c("POLYGON", "MULTIPOLYGON"), ]
@@ -518,39 +791,37 @@ grid_clip <- function(boundary, grid, crop = TRUE) {
   bbox <- sf::st_bbox(boundary)
 
   # Disable S2 for all spatial operations (spherical geometry can cause issues)
-  s2_state <- sf::sf_use_s2()
-  sf::sf_use_s2(FALSE)
-  on.exit(sf::sf_use_s2(s2_state), add = TRUE)
+  local_s2(FALSE)
 
   # Generate rectangular grid covering the boundary
   rect_grid <- grid_rect(bbox, g)
-  rect_grid <- sf::st_make_valid(rect_grid)
+  rect_grid <- sf_planar(sf::st_make_valid(rect_grid))
 
   # Get boundary geometry and ensure it's valid
   boundary_geom <- sf::st_geometry(boundary)
-  boundary_geom <- sf::st_make_valid(boundary_geom)
+  boundary_geom <- sf_planar(sf::st_make_valid(boundary_geom))
   if (inherits(boundary, "sf") || length(boundary_geom) > 1) {
-    boundary_geom <- sf::st_union(boundary_geom)
-    boundary_geom <- sf::st_make_valid(boundary_geom)
+    boundary_geom <- sf_planar(sf::st_union(boundary_geom))
+    boundary_geom <- sf_planar(sf::st_make_valid(boundary_geom))
   }
 
   if (crop) {
     # Crop hexagons to boundary
     result <- tryCatch({
-      suppressWarnings(sf::st_intersection(rect_grid, boundary_geom))
+      sf_planar(sf::st_intersection(rect_grid, boundary_geom))
     }, error = function(e) {
       # If intersection fails, try with buffered geometries
       boundary_buf <- sf::st_buffer(boundary_geom, 0)
       rect_buf <- sf::st_buffer(rect_grid, 0)
-      suppressWarnings(sf::st_intersection(rect_buf, boundary_buf))
+      sf_planar(sf::st_intersection(rect_buf, boundary_buf))
     })
     # Keep only polygon geometries (filter out points/lines from edge cases)
     geom_types <- sf::st_geometry_type(result)
     result <- result[geom_types %in% c("POLYGON", "MULTIPOLYGON"), ]
   } else {
     # Filter to hexagons whose centroids fall within boundary
-    centroids <- suppressWarnings(sf::st_centroid(rect_grid))
-    within <- suppressWarnings(
+    centroids <- sf_planar(sf::st_centroid(rect_grid))
+    within <- sf_planar(
       sf::st_within(centroids, boundary_geom, sparse = FALSE)
     )
     result <- rect_grid[apply(within, 1, any), ]
@@ -563,11 +834,13 @@ grid_clip <- function(boundary, grid, crop = TRUE) {
 # CELL AREA COMPUTATION
 # =============================================================================
 
-#' Compute per-cell area in km²
+#' Compute Per-Cell Area in km²
 #'
-#' Returns the area of each cell in square kilometers. For ISEA grids, all
-#' cells have the same area (equal-area property). For H3 grids, each cell
-#' has a different geodesic area depending on its location.
+#' Returns the area of each cell in square kilometers. On the ISEA and IVEA
+#' projections every hexagon of a resolution has the same area, the 12
+#' pentagons of the icosahedron 5/6 of it, the 6 squares of the
+#' octahedron 4/6 of it and the 4 triangles of the tetrahedron half of it. On
+#' the Fuller projection and for H3 grids, the area varies from cell to cell.
 #'
 #' @param cell_id Cell IDs to compute area for. For ISEA grids, these are
 #'   numeric; for H3 grids, character strings. When \code{grid} is a HexData
@@ -578,10 +851,22 @@ grid_clip <- function(boundary, grid, crop = TRUE) {
 #' @return Named numeric vector of areas in km², one per \code{cell_id}.
 #'
 #' @details
-#' For ISEA grids the area is constant across all cells and is read directly
-#' from the grid specification.
+#' On the ISEA and IVEA projections, both equal-area, every hexagon of a
+#' resolution has the same area. A vertex cell, centred on a vertex of the
+#' solid where \eqn{k} faces meet, covers \eqn{k} of a hexagon's six sixths,
+#' so a grid of \eqn{N} cells on a body of area \eqn{S} has hexagons of area
+#' \eqn{S / (N - 2)}, pentagons of \eqn{(5/6) S / (N - 2)} on the
+#' icosahedron, squares of \eqn{(4/6) S / (N - 2)} on the octahedron and
+#' triangles of \eqn{(3/6) S / (N - 2)} on the tetrahedron. The
+#' grid's \code{area_km2} is the mean, \eqn{S / N}.
 #'
-#' For H3 grids the area varies by latitude. The vendored 'H3' library computes
+#' On the Fuller projection (\code{hex_grid(projection = "fuller")}) cells are
+#' not equal-area. Each cell's area is its solid angle, summed over its true
+#' boundary, times the body's area over \eqn{4\pi}, so the cells of a grid add
+#' up to the body's area.
+#'
+#' For H3 grids the area varies from cell to cell, by about a factor of 2
+#' across the hexagons of a resolution. The vendored 'H3' library computes
 #' each cell's spherical polygon area as a solid angle, which this function
 #' reads on the grid's body, so a grid built with \code{radius_km} reports that
 #' body's areas.
@@ -591,7 +876,7 @@ grid_clip <- function(boundary, grid, crop = TRUE) {
 #'
 #' @export
 #' @examples
-#' # ISEA: constant area
+#' # ISEA: one area for every hexagon
 #' grid <- hex_grid(area_km2 = 1000)
 #' cells <- lonlat_to_cell(c(0, 10, 20), c(45, 50, 55), grid)
 #' cell_area(cells, grid)
@@ -603,31 +888,32 @@ grid_clip <- function(boundary, grid, crop = TRUE) {
 #' cell_area(h3_cells, h3)  # equator vs polar — different areas
 #' }
 cell_area <- function(cell_id = NULL, grid) {
+  resolved <- resolve_cells_grid(cell_id, grid)
+  cell_id <- resolved$cell_id
+  g <- resolved$grid
 
-  # Handle HexData input
-  if (is_hex_data(grid)) {
-    if (is.null(cell_id)) {
-      cell_id <- grid@cell_id
-    }
-    g <- grid@grid
+  cell_id <- if (is_h3_grid(g)) as.character(cell_id) else as_cell_id(cell_id)
+  ids <- unique(cell_id)
+  surface <- body_surface_km2(grid_radius_km(g))
+
+  per_id <- if (is_h3_grid(g)) {
+    scale_area_to_body(cpp_h3_cellAreaKm2(ids), grid_radius_km(g))
+  } else if (!is_equal_area_projection(grid_projection(g))) {
+    lv <- isea_levels(g@aperture, g@resolution)
+    sr <- cpp_cell_solid_angle(icosa_arg(g), ids, lv$resolution, lv$aperture,
+                               lv$ap_seq, CELL_WALL_TOLERANCE)
+    sr / (4 * pi) * surface
   } else {
-    g <- extract_grid(grid)
-    if (is.null(cell_id)) {
-      stop("cell_id required when grid is not HexData")
-    }
+    # The vertex cells together cover as much as the solid's diamond count of
+    # hexagons, so a hexagon is the surface over n_cells - 2 and a vertex cell
+    # with k sides is k / 6 of one. Hex9 has no vertex cells.
+    vertex_deficit <- if (is_hex9_grid(g)) 0 else 2
+    hexagon <- surface / (grid_n_cells(g) - vertex_deficit)
+    isea_cell_sides(ids, g) / 6 * hexagon
   }
 
-  # ISEA: constant equal-area
-  if (!is_h3_grid(g)) {
-    areas <- rep(g@area_km2, length(cell_id))
-    names(areas) <- as.character(cell_id)
-    return(areas)
-  }
-
-  # H3: per-cell area via native C backend, read on the grid's body
-  cell_id <- as.character(cell_id)
-  areas <- scale_area_to_body(cpp_h3_cellAreaKm2(cell_id), grid_radius_km(g))
-  names(areas) <- cell_id
+  areas <- per_id[match(cell_id, ids)]
+  names(areas) <- as.character(cell_id)
   areas
 }
 
@@ -636,52 +922,211 @@ cell_area <- function(cell_id = NULL, grid) {
 # HIERARCHICAL INDEX HELPERS
 # =============================================================================
 
-#' Hierarchical index string of one cell on a pure-aperture grid
+#' Quad coordinates of cells on any ISEA grid
 #'
-#' The index encoders work on (quad, i, j), so a cell ID makes the round trip
+#' A pure aperture and a mixed sequence pack their cells the same way and are
+#' read by the same walk.
+#'
+#' @param cell_id Cell IDs: integer64 for ISEA grids (whole numbers below
+#'   2^53 and digit strings are accepted), character for H3 grids
+#' @param g HexGridInfo object
+#' @return Data frame with quad, i and j columns
+#' @noRd
+grid_quad_ij <- function(cell_id, g) {
+  lv <- isea_levels(g@aperture, g@resolution)
+  cpp_cell_to_quad_ij(icosa_arg(g), as_cell_id(cell_id), lv$resolution,
+                      lv$aperture, lv$ap_seq)
+}
+
+#' Number of sides of cells on any ISEA grid
+#'
+#' Six, except for the cell at each vertex of the solid, which has one side per
+#' face meeting there: five on the icosahedron, four on the octahedron, three
+#' on the tetrahedron. Every
+#' cell of resolution 0 is a vertex cell, and every other vertex cell is the
+#' (0, 0) cell of its quad. Hex9 centres no cell on a vertex, so every Hex9
+#' cell has six.
+#'
+#' @param cell_id Cell IDs: integer64 for ISEA grids (whole numbers below
+#'   2^53 and digit strings are accepted), character for H3 grids
+#' @param g HexGridInfo object
+#' @return Integer vector of side counts
+#' @noRd
+isea_cell_sides <- function(cell_id, g) {
+  if (is_hex9_grid(g)) return(rep(6L, length(cell_id)))
+  valence <- solid_info(grid_polyhedron(g))$valence
+  qij <- grid_quad_ij(cell_id, g)
+  at_vertex <- g@resolution == 0L | (qij$i == 0 & qij$j == 0)
+  ifelse(at_vertex, valence[qij$quad + 1L], 6L)
+}
+
+#' The cells adjacent to given cells on any ISEA grid
+#'
+#' @param cell_id Cell IDs: integer64 for ISEA grids (whole numbers below
+#'   2^53 and digit strings are accepted), character for H3 grids
+#' @param g HexGridInfo object
+#' @return List of integer64 vectors, the neighbours of each cell
+#' @noRd
+grid_neighbors_isea <- function(cell_id, g) {
+  lv <- isea_levels(g@aperture, g@resolution)
+  cpp_get_neighbors_isea(icosa_arg(g), as_cell_id(cell_id), lv$resolution,
+                         lv$aperture, lv$ap_seq)
+}
+
+#' Hierarchical index strings of cells on a pure-aperture grid
+#'
+#' The index encoders work on (quad, i, j), so cell IDs make the round trip
 #' through `cpp_cell_to_quad_ij()` first. `cell_to_index()`, `get_parent()` and
 #' `get_children()` all enter the hierarchy this way.
 #'
-#' @param cell_id One cell ID
-#' @param resolution Resolution the cell ID belongs to
+#' @param cell_id Cell IDs: integer64 for ISEA grids (whole numbers below
+#'   2^53 and digit strings are accepted), character for H3 grids
+#' @param resolution Resolution the cell IDs belong to
 #' @param aperture_int Integer aperture (3, 4 or 7)
 #' @param index_type One of "z3", "z7", "zorder"
-#' @return Index string
+#' @param icosa The grid's solid as the C++ layer takes it (icosa_arg())
+#' @return Character vector of index strings
 #' @noRd
-isea_cell_to_index_one <- function(cell_id, resolution, aperture_int, index_type) {
-  qij <- cpp_cell_to_quad_ij(cell_id, resolution, aperture_int)
-  cpp_cell_to_index(qij$quad, qij$i, qij$j, resolution, aperture_int, index_type)
+isea_cells_to_index <- function(cell_id, resolution, aperture_int, index_type,
+                                icosa) {
+  qij <- cpp_cell_to_quad_ij(icosa, as_cell_id(cell_id), resolution, aperture_int,
+                             integer(0))
+  cpp_cell_to_index(icosa, qij$quad, qij$i, qij$j, resolution, aperture_int,
+                    index_type)
 }
 
-#' Cell ID of one hierarchical index string on a pure-aperture grid
+#' Cell IDs of hierarchical index strings on a pure-aperture grid
 #'
-#' Inverse of [isea_cell_to_index_one()]. The index carries its own resolution,
-#' which is the one the returned cell ID belongs to.
+#' Inverse of `isea_cells_to_index()`. Each index carries its own resolution,
+#' which is the one its cell ID belongs to, so the strings are packed back into
+#' cell IDs one resolution at a time.
 #'
-#' @param index One index string
+#' @param index Character vector of index strings
 #' @param aperture_int Integer aperture (3, 4 or 7)
 #' @param index_type One of "z3", "z7", "zorder"
-#' @return Cell ID
+#' @param icosa The grid's solid as the C++ layer takes it (icosa_arg())
+#' @return integer64 vector of cell IDs
 #' @noRd
-isea_index_to_cell_one <- function(index, aperture_int, index_type) {
-  cell <- cpp_index_to_cell(index, aperture_int, index_type)
-  cpp_quad_ij_to_cell(cell$face, cell$i, cell$j, cell$resolution, aperture_int)
+isea_index_to_cells <- function(index, aperture_int, index_type, icosa) {
+  cell <- cpp_index_to_cell(icosa, as.character(index), aperture_int, index_type)
+  out <- as_cell_id(rep(NA, nrow(cell)))
+
+  for (resolution in unique(stats::na.omit(cell$resolution))) {
+    at_res <- !is.na(cell$resolution) & cell$resolution == resolution
+    out[at_res] <- cpp_quad_ij_to_cell(icosa, cell$face[at_res], cell$i[at_res],
+                                       cell$j[at_res], resolution, aperture_int,
+                                       integer(0))
+  }
+
+  out
 }
 
-#' Convert cell ID to hierarchical index string
+#' Convert Cell ID to Hierarchical Index String
 #'
 #' Advanced function for working with hierarchical index strings.
 #' Most users don't need this - use cell IDs directly.
 #'
-#' @param cell_id Numeric vector of cell IDs
+#' @param cell_id Cell IDs: integer64 for ISEA grids (whole numbers below
+#'   2^53 and digit strings are accepted), character for H3 grids
 #' @param grid A HexGridInfo or HexData object
+#' @param form The form of the identifier. `"string"` (the default) is the
+#'   hierarchical index string. Aperture-7 grids on the icosahedron also
+#'   write IGEO7's integer forms of the Z7 index: `"int"`, the packed 64-bit
+#'   index as `bit64::integer64`; `"hex"`, the same 64 bits as 16 lowercase
+#'   hexadecimal digits, as DGGRID writes its INT64 Z7 output; and
+#'   `"monotonic"`, the monotonic ID as integer64. Aperture-3 and aperture-7
+#'   grids on the icosahedron also write the zone identifiers of OGC's
+#'   ISEA3H, ISEA7H, IVEA3H and IVEA7H DGGRS definitions: `"textZIRS"`,
+#'   strings such as "E6-317-A", and `"uint64ZIRS"`, the same fields packed
+#'   into a 64-bit integer as integer64.
 #'
-#' @return Character vector of hierarchical index strings
+#' @return Character vector of hierarchical index strings, or the form
+#'   `form` names
 #'
+#' @details
+#' A cell ID numbers the cells of one resolution from 1, so it names a cell
+#' only together with its grid. The index string carries its resolution in
+#' its length and names one cell among all resolutions of the grid's family,
+#' and so serves as the zonal identifier of OGC Topic 21; an H3 index carries
+#' its resolution in its bits. A Hex9 index is the cell's label in 'libhex9',
+#' Griffin's reference implementation: its digits, one per resolution (0-9 and
+#' a, b for the twelve cells of resolution 0), a dot, and the key tail
+#' (0-5), as in \code{"435878503.3"}.
+#'
+#' @section IGEO7 integer forms:
+#' The Z7 string of an aperture-7 cell is two decimal digits naming its base
+#' cell (00-11) and one digit 0-6 per resolution. The packed index holds the
+#' same fields in 64 bits (Kmoch et al. 2025): the base cell in bits 63-60,
+#' then three bits per digit, resolution 1 in bits 59-57 down to resolution 20
+#' in bits 2-0, and the digit 7 (binary 111) at every resolution below the
+#' cell's own. "033000" packs to 0x3600ffffffffffff. The packed index exists
+#' up to resolution 20, IGEO7's finest.
+#'
+#' integer64 is a signed type, so `"int"` keeps the 64 bits and reads them as
+#' a signed number: the indices of base cells 08-11, whose top bit is set,
+#' print as negative numbers and sort before those of base cells 00-07. The
+#' one packed index whose bits are 2^63, the pentagon of base cell 08 at
+#' resolution 20, is the bit pattern bit64 reserves for `NA`, so as integer64
+#' it cannot be told from a missing value. `"hex"` carries every index
+#' exactly.
+#'
+#' The monotonic ID reads the Z7 string as a number: the base cell times
+#' 7^r plus the r digits as a base-7 number, so "033000" is
+#' 3 * 7^4 + 3 * 7^3 = 8232. Within one resolution it sorts as the strings
+#' do, and the deleted subsequence under each pentagon leaves its numbers
+#' unused. It reaches resolution 21, where it still fits in a signed 64-bit
+#' integer.
+#'
+#' @section OGC zone identifiers:
+#' `"textZIRS"` and `"uint64ZIRS"` are the identifiers DGGAL writes for OGC's
+#' ISEA3H, ISEA7H, IVEA3H and IVEA7H. textZIRS names a zone by its level (a
+#' letter; for aperture 3 the level of the even resolution at or below), a
+#' root rhombus 0-9 (two icosahedron faces; A and B for the two polar zones),
+#' a sub-rhombus counted row by row within it in hexadecimal, and a letter
+#' for the zone among those at that sub-rhombus. uint64ZIRS packs the same
+#' fields into one integer. They depend on which cell is which, not on where
+#' the solid sits, so they are written for any orientation and face
+#' projection; they name OGC's zones on `hex_grid(aperture = 3, ellipsoid =
+#' "WGS84", orientation = "ogc")`, its aperture-7 twin, and the same with
+#' `projection = "ivea"`. Aperture-7 zones exist up to level 19.
+#'
+#' @references
+#' Kmoch, A., Sahr, K., Chan, W. T., Uuemaa, E. (2025). IGEO7: A new
+#' hierarchically indexed hexagonal equal-area discrete global grid system.
+#' AGILE: GIScience Series 6, 32. \doi{10.5194/agile-giss-6-32-2025}
+#'
+#' Open Geospatial Consortium. OGC API - Discrete Global Grid Systems, DGGRS
+#' definition examples ISEA3H, ISEA7H, IVEA3H and IVEA7H.
+#' \url{https://github.com/opengeospatial/ogcapi-discrete-global-grid-systems}
+#'
+#' @seealso [index_to_cell()] for the inverse
 #' @keywords internal
 #' @export
-cell_to_index <- function(cell_id, grid) {
+#' @examples
+#' g <- hex_grid(resolution = 4, aperture = 7)
+#' cell <- index_to_cell("033000", g)
+#' cell_to_index(cell, g, form = "hex")
+#' cell_to_index(cell, g, form = "monotonic")
+#'
+#' ogc <- hex_grid(resolution = 8, aperture = 3, ellipsoid = "WGS84",
+#'                 orientation = "ogc")
+#' crimea <- lonlat_to_cell(34.78, 45.43, ogc)
+#' cell_to_index(crimea, ogc, form = "textZIRS")
+#' cell_to_index(crimea, ogc, form = "uint64ZIRS")
+cell_to_index <- function(cell_id, grid,
+                          form = c("string", "int", "hex", "monotonic",
+                                   "textZIRS", "uint64ZIRS")) {
   g <- extract_grid(grid)
+  form <- match.arg(form)
+  if (form %in% IGEO7_FORMS) {
+    check_igeo7_grid(g, form)
+    return(cpp_cell_to_z7(icosa_arg(g), as_cell_id(cell_id), g@resolution, form))
+  }
+  if (form %in% ZIRS_FORMS) {
+    check_zirs_grid(g)
+    f <- zirs_fields(as_cell_id(cell_id), g)
+    return(if (form == "textZIRS") zirs_text(f, g@aperture) else zirs_uint64(f, g@aperture))
+  }
 
   # H3 cell IDs are already hierarchical index strings
   if (is_h3_grid(g)) {
@@ -691,8 +1136,10 @@ cell_to_index <- function(cell_id, grid) {
   # Mixed sequences use a geometric hierarchical index (see
   # R/aperture_mixed_hierarchy.R); pure apertures use the Z7/Z3/zorder encoders.
   if (is_mixed_aperture(g@aperture)) {
-    return(vapply(as.numeric(cell_id),
-                  function(id) mixed_cell_to_index_one(id, g@resolution, g@aperture),
+    ids <- as_cell_id(cell_id)
+    return(vapply(seq_along(ids),
+                  function(k) mixed_cell_to_index_one(ids[k], g@resolution, g@aperture,
+                                                      grid_polyhedron(g)),
                   character(1)))
   }
 
@@ -700,20 +1147,165 @@ cell_to_index <- function(cell_id, grid) {
   index_type <- index_type_for_aperture(g@aperture)
   aperture_int <- aperture_to_int(g@aperture)
 
-  vapply(as.numeric(cell_id), isea_cell_to_index_one, character(1),
-         resolution = g@resolution, aperture_int = aperture_int,
-         index_type = index_type, USE.NAMES = FALSE)
+  isea_cells_to_index(cell_id, g@resolution, aperture_int, index_type, icosa_arg(g))
 }
 
-#' Get parent cell
+#' Convert Hierarchical Index to Cell ID
+#'
+#' The inverse of [cell_to_index()]: the cells of `grid` that index strings,
+#' IGEO7 integer forms or OGC zone identifiers name.
+#'
+#' @param index Identifiers in the form `form` names: character for
+#'   `"string"`, `"hex"` and `"textZIRS"`, integer64 (or whole numbers below
+#'   2^53, or for `"uint64ZIRS"` digit strings) for `"int"`, `"monotonic"`
+#'   and `"uint64ZIRS"`
+#' @param grid A HexGridInfo or HexData object
+#' @param form The form of `index`, as in [cell_to_index()]
+#'
+#' @return Cell IDs of `grid`: integer64 for ISEA grids, character for H3
+#'   grids. Every index must name a cell of the grid's resolution; an OGC
+#'   identifier that names no zone of the grid reads as `NA`.
+#'
+#' @details
+#' A packed or hexadecimal IGEO7 index carries its resolution in its
+#' trailing 7 digits, and an OGC identifier in its level; a monotonic ID is
+#' read at the grid's resolution. See [cell_to_index()] for the forms.
+#'
+#' @seealso [cell_to_index()]
+#' @keywords internal
+#' @export
+#' @examples
+#' g <- hex_grid(resolution = 4, aperture = 7)
+#' index_to_cell("033000", g)
+#' index_to_cell("3600ffffffffffff", g, form = "hex")
+#' index_to_cell(bit64::as.integer64("8232"), g, form = "monotonic")
+#'
+#' ogc <- hex_grid(resolution = 8, aperture = 3, ellipsoid = "WGS84",
+#'                 orientation = "ogc")
+#' cell_to_lonlat(index_to_cell("E6-317-A", ogc, form = "textZIRS"), ogc)
+index_to_cell <- function(index, grid,
+                          form = c("string", "int", "hex", "monotonic",
+                                   "textZIRS", "uint64ZIRS")) {
+  g <- extract_grid(grid)
+  form <- match.arg(form)
+  if (form %in% IGEO7_FORMS) {
+    check_igeo7_grid(g, form)
+    index <- if (form == "hex") as.character(index) else as_cell_id(index, "index")
+    return(cpp_z7_to_cell(icosa_arg(g), index, g@resolution, form))
+  }
+  if (form %in% ZIRS_FORMS) {
+    check_zirs_grid(g)
+    f <- if (form == "textZIRS") {
+      parse_zirs_text(as.character(index), g@aperture)
+    } else {
+      parse_zirs_uint64(if (is.character(index)) bit64::as.integer64(index) else index,
+                        g@aperture)
+    }
+    known <- !is.na(f$level)
+    check_index_resolution(f$level[known], g@resolution, as.character(index)[known])
+    return(zirs_cells(f, g))
+  }
+  index <- as.character(index)
+  ok <- !is.na(index)
+
+  if (is_h3_grid(g)) {
+    check_index_resolution(cpp_h3_getResolution(index[ok]), g@resolution, index[ok])
+    return(index)
+  }
+
+  if (is_mixed_aperture(g@aperture)) {
+    check_index_resolution((nchar(index[ok]) - 2L) %/% mixed_index_digit_width,
+                           g@resolution, index[ok])
+    out <- as_cell_id(rep(NA, length(index)))
+    out[ok] <- cell_id_unlist(lapply(index[ok], mixed_index_to_cell_one,
+                                     resolution = g@resolution,
+                                     aperture = g@aperture,
+                                     polyhedron = grid_polyhedron(g)))
+    return(out)
+  }
+
+  aperture_int <- aperture_to_int(g@aperture)
+  index_type <- index_type_for_aperture(g@aperture)
+  check_index_resolution(cpp_get_index_resolution(index[ok], aperture_int, index_type),
+                         g@resolution, index[ok])
+  isea_index_to_cells(index, aperture_int, index_type, icosa_arg(g))
+}
+
+#' The forms of cell_to_index() and index_to_cell() beside hexify's strings:
+#' IGEO7's integer forms of the Z7 index, and OGC's zone identifiers
+#' @noRd
+IGEO7_FORMS <- c("int", "hex", "monotonic")
+
+#' @rdname IGEO7_FORMS
+#' @noRd
+ZIRS_FORMS <- c("textZIRS", "uint64ZIRS")
+
+#' Stop unless a grid carries IGEO7 labels, which the integer forms need
+#' @param g HexGridInfo object
+#' @param form The form asked for
+#' @noRd
+check_igeo7_grid <- function(g, form) {
+  if (is_h3_grid(g) || as.character(g@aperture) != "7" ||
+      grid_polyhedron(g) != "icosahedron") {
+    stop(sprintf(paste0(
+      "form = \"%s\" is one of IGEO7's integer forms of the Z7 index, defined ",
+      "for aperture-7 grids on the icosahedron"), form), call. = FALSE)
+  }
+  invisible(TRUE)
+}
+
+#' Stop unless every index has the grid's resolution
+#' @param res Resolutions of the indices
+#' @param resolution The grid's resolution
+#' @param index The indices, for the message
+#' @noRd
+check_index_resolution <- function(res, resolution, index) {
+  bad <- which(res != resolution)
+  if (length(bad) > 0L) {
+    stop(sprintf(paste0(
+      "index \"%s\" names a resolution-%d cell; the grid's cells are at ",
+      "resolution %d"), index[bad[1]], res[bad[1]], resolution), call. = FALSE)
+  }
+  invisible(TRUE)
+}
+
+#' Get Parent Cell
 #'
 #' Returns the parent cell at a coarser resolution.
 #'
-#' @param cell_id Numeric vector of cell IDs
+#' @param cell_id Cell IDs: integer64 for ISEA grids (whole numbers below
+#'   2^53 and digit strings are accepted), character for H3 grids
 #' @param grid A HexGridInfo or HexData object
 #' @param levels Number of levels up (default 1)
+#' @param overlapping If \code{TRUE}, return every cell at the coarser
+#'   resolution that overlaps the cell, not only the one holding its centre.
 #'
-#' @return Numeric vector of parent cell IDs
+#' @return Parent cell IDs, of the type the grid's cell IDs have. With
+#'   \code{overlapping = TRUE}, a list with one vector per input cell, the
+#'   parent holding the cell's centre first.
+#'
+#' @details
+#' A cell's parent is the coarser cell holding its centre. The hexagons of
+#' successive resolutions do not nest, so a cell can also reach into one or two
+#' neighbours of that parent: an aperture-3 cell centred on a parent corner
+#' lies a third in each of three parents, an aperture-4 cell centred on a
+#' parent edge half in each of two, and an aperture-7 cell off the parent's
+#' centre 11/12 in its parent and 1/12 in one neighbour. A Hex9 cell's parent
+#' is the coarser cell holding the cell's mode-0 half (Griffin 2026); six of
+#' every nine cells lie inside their parent, and the other three straddle its
+#' boundary, half in each of two cells. Several levels up, a Hex9 cell's parent
+#' is again the coarser cell holding its mode-0 half, Griffin's canonical
+#' ancestor ('libhex9''s \code{hex9_cell_ancestor}), and
+#' \code{\link{get_children}} returns the cells it is the ancestor of; on
+#' every other grid it is the parent's parent.
+#' \code{overlapping = TRUE} returns all of them, as the \code{parent()} query
+#' of OGC Topic 21 does when \code{inheritID} is false; the default is its
+#' \code{inheritID = true} answer. \code{\link{hex_aggregate}} divides cell
+#' values among them by these shares.
+#'
+#' Every part of a cell that lies in a coarser cell holds a corner of the
+#' cell, so the overlapping cells are the coarser cells holding the cell's
+#' corners, each taken a small step towards the centre.
 #'
 #' @keywords internal
 #' @export
@@ -721,12 +1313,18 @@ cell_to_index <- function(cell_id, grid) {
 #' grid <- hex_grid(resolution = 10)
 #' child_cells <- lonlat_to_cell(c(0, 10), c(45, 50), grid)
 #' parent_cells <- get_parent(child_cells, grid)
-get_parent <- function(cell_id, grid, levels = 1L) {
+#'
+#' # Every coarser cell a cell reaches into
+#' g3 <- hex_grid(resolution = 5, aperture = 3)
+#' cells <- lonlat_to_cell(c(0, 10), c(45, 50), g3)
+#' get_parent(cells, g3, overlapping = TRUE)
+get_parent <- function(cell_id, grid, levels = 1L, overlapping = FALSE) {
   g <- extract_grid(grid)
 
   if (g@resolution < levels) {
     stop("Cannot get parent: already at minimum resolution")
   }
+  if (overlapping) return(overlapping_parents(cell_id, g, as.integer(levels)))
 
   # H3 path
   if (is_h3_grid(g)) {
@@ -739,8 +1337,13 @@ get_parent <- function(cell_id, grid, levels = 1L) {
 
   # Mixed sequences: geometric parent (centre re-quantised at the coarser resolution).
   if (is_mixed_aperture(g@aperture)) {
-    return(mixed_get_parent(as.numeric(cell_id), g@resolution, g@aperture,
-                            as.integer(levels)))
+    return(mixed_get_parent(as_cell_id(cell_id), g@resolution, g@aperture,
+                            as.integer(levels), grid_polyhedron(g)))
+  }
+
+  # Hex9: the canonical ancestor, the coarser cell holding the mode-0 half
+  if (is_hex9_grid(g)) {
+    return(cpp_hex9_ancestor(as_cell_id(cell_id), g@resolution, as.integer(levels)))
   }
 
   index_type <- index_type_for_aperture(g@aperture)
@@ -749,28 +1352,137 @@ get_parent <- function(cell_id, grid, levels = 1L) {
 
   # cpp_get_parent_index() strips one level off the index string, so `levels`
   # levels up is that many strips.
-  vapply(as.numeric(cell_id), function(id) {
-    idx <- isea_cell_to_index_one(id, g@resolution, aperture_int, index_type)
-    for (step in seq_len(levels)) {
-      idx <- cpp_get_parent_index(idx, aperture_int, index_type)
-    }
-    isea_index_to_cell_one(idx, aperture_int, index_type)
-  }, numeric(1), USE.NAMES = FALSE)
+  icosa <- icosa_arg(g)
+  idx <- isea_cells_to_index(cell_id, g@resolution, aperture_int, index_type, icosa)
+  for (step in seq_len(levels)) {
+    idx <- cpp_get_parent_index(idx, aperture_int, index_type)
+  }
+  isea_index_to_cells(idx, aperture_int, index_type, icosa)
 }
 
-#' Get children cells
+#' Coarser cells overlapping each cell
 #'
-#' Returns the child cells at a finer resolution.
+#' Each corner is moved a fraction `CORNER_STEP` of the way to the cell's
+#' centre, on the chord between their unit vectors, and quantised at the
+#' coarser resolution.
+#' @param cell_id Cell IDs
+#' @param g HexGridInfo object
+#' @param levels Levels up
+#' @return List of cell ID vectors, the centre's parent first
+#' @noRd
+overlapping_parents <- function(cell_id, g, levels) {
+  if (!is_h3_grid(g)) cell_id <- as_cell_id(cell_id)
+  pg <- grid_at_resolution(g, g@resolution - levels)
+  rings <- cell_corner_rings(cell_id, g)
+  centre <- cell_to_lonlat(cell_id, g)
+  n_corner <- vapply(rings, nrow, integer(1))
+  owner <- rep(seq_along(cell_id), n_corner)
+
+  icosa <- icosa_arg(g)
+  corner <- unit_vec(unlist(lapply(rings, function(r) r[, 1]), use.names = FALSE),
+                     unlist(lapply(rings, function(r) r[, 2]), use.names = FALSE),
+                     icosa)
+  mid <- unit_vec(centre$lon_deg, centre$lat_deg, icosa)[owner, , drop = FALSE]
+  step <- corner + CORNER_STEP * (mid - corner)
+  ll <- vec_lonlat(step / sqrt(rowSums(step^2)), icosa)
+
+  # Each cell's own parent, then every other coarser cell its corners reach,
+  # each once: (cell, coarser cell) pairs are deduplicated as integer keys and
+  # stably ordered by cell.
+  o <- c(seq_along(cell_id), owner)
+  h <- c(get_parent(cell_id, g, levels), lonlat_to_cell(ll[, 1], ll[, 2], pg))
+  u <- unique(h)
+  keep <- !duplicated(o * (length(u) + 1) + match(h, u))
+  o <- o[keep]
+  h <- h[keep]
+  idx <- order(o, method = "radix")
+  slot <- factor(o[idx], levels = seq_along(cell_id))
+  if (is_h3_grid(g)) return(unname(split(h[idx], slot)))
+  unname(lapply(split(unclass(h[idx]), slot), `class<-`, "integer64"))
+}
+
+#' Corners of cells, one lon/lat matrix per cell
+#' @noRd
+cell_corner_rings <- function(cell_id, g) {
+  if (is_h3_grid(g)) return(cpp_h3_cellToBoundary(as.character(cell_id)))
+  isea_cell_rings(cell_id, g@resolution, g@aperture, icosa_arg(g),
+                  tolerance = 0, max_arc = 0)
+}
+
+#' Sibling Cells
 #'
-#' @param cell_id Numeric vector of cell IDs
-#' @param grid A HexGridInfo or HexData object
-#' @param levels Number of levels down (default 1)
+#' Returns the other children of each cell's parent.
 #'
-#' @return List of numeric vectors containing child cell IDs
+#' @inheritParams get_parent
+#' @param include_self If \code{TRUE}, keep the cell itself among its
+#'   siblings.
+#'
+#' @return List with one vector of cell IDs per input cell.
+#'
+#' @details
+#' The parent is the one \code{\link{get_parent}} returns, the coarser cell
+#' holding the cell's centre, and the siblings are its children as
+#' \code{\link{get_children}} returns them: the \code{siblingOf} relation of
+#' OGC Topic 21 with \code{inheritID} true.
+#'
+#' @seealso \code{\link{get_parent}}, \code{\link{get_children}}
 #'
 #' @keywords internal
 #' @export
-get_children <- function(cell_id, grid, levels = 1L) {
+#' @examples
+#' g <- hex_grid(resolution = 4, aperture = 7)
+#' cell <- lonlat_to_cell(16.37, 48.21, g)
+#' get_siblings(cell, g)
+get_siblings <- function(cell_id, grid, include_self = FALSE) {
+  g <- extract_grid(grid)
+  if (!is_h3_grid(g)) cell_id <- as_cell_id(cell_id)
+  parent <- get_parent(cell_id, g)
+  kids <- get_children(parent, grid_at_resolution(g, g@resolution - 1L))
+  if (include_self) return(kids)
+  lapply(seq_along(cell_id), function(k) kids[[k]][kids[[k]] != cell_id[k]])
+}
+
+#' Get Children Cells
+#'
+#' Returns the child cells at a finer resolution.
+#'
+#' @param cell_id Cell IDs: integer64 for ISEA grids (whole numbers below
+#'   2^53 and digit strings are accepted), character for H3 grids
+#' @param grid A HexGridInfo or HexData object
+#' @param levels Number of levels down (default 1)
+#' @param as_sf If \code{TRUE}, return the children as sf polygons, one row
+#'   per child with its \code{parent_id}.
+#'
+#' @return List of vectors of child cell IDs, one per input
+#'   cell; with \code{as_sf = TRUE}, an sf object with columns
+#'   \code{parent_id}, \code{cell_id} and \code{geometry}.
+#'
+#' @keywords internal
+#' @export
+#' @examples
+#' grid <- hex_grid(resolution = 3, aperture = 4)
+#' parent <- lonlat_to_cell(10, 50, grid)
+#' get_children(parent, grid)
+#' kids <- get_children(parent, grid, levels = 2, as_sf = TRUE)
+#' plot(sf::st_geometry(kids))
+#' plot(sf::st_geometry(cell_to_sf(parent, grid)), border = "red", add = TRUE)
+get_children <- function(cell_id, grid, levels = 1L, as_sf = FALSE) {
+  if (as_sf) {
+    g <- extract_grid(grid)
+    children <- get_children(cell_id, g, levels)
+    if (is_h3_grid(g)) {
+      child_id <- unlist(children, use.names = FALSE)
+    } else {
+      cell_id <- as_cell_id(cell_id)
+      child_id <- cell_id_unlist(children)
+    }
+    polys <- cell_to_sf(child_id, grid_at_resolution(g, g@resolution + as.integer(levels)))
+    return(sf::st_sf(
+      parent_id = rep(cell_id, lengths(children)),
+      cell_id = child_id,
+      geometry = sf::st_geometry(polys)[match(child_id, polys$cell_id)]
+    ))
+  }
   g <- extract_grid(grid)
 
   # H3 path
@@ -782,33 +1494,158 @@ get_children <- function(cell_id, grid, levels = 1L) {
     return(cpp_h3_cellToChildren(as.character(cell_id), child_res))
   }
 
-  if (g@resolution + levels > MAX_RESOLUTION) {
+  child_res <- g@resolution + as.integer(levels)
+  if (child_res > MAX_RESOLUTION) {
     stop("Cannot get children: would exceed maximum resolution")
   }
+  check_isea_resolution(aperture_at_resolution(g@aperture, child_res), child_res,
+                        grid_polyhedron(g))
+  ids <- as_cell_id(cell_id)
+
+  if (is_hex9_grid(g)) return(hex9_owned_cells(ids, g, as.integer(levels)))
 
   # Mixed sequences: geometric children (cells whose geometric parent is this cell).
   if (is_mixed_aperture(g@aperture)) {
-    child_res <- g@resolution + as.integer(levels)
-    ncc <- aperture_n_cells(g@aperture, child_res)
-    return(lapply(as.numeric(cell_id), function(id)
-      mixed_get_children_one(id, g@resolution, child_res, g@aperture, ncc)))
+    ncc <- aperture_n_cells(g@aperture, child_res, grid_polyhedron(g))
+    return(lapply(seq_along(ids), function(k)
+      mixed_get_children_one(ids[k], g@resolution, child_res, g@aperture, ncc,
+                             grid_polyhedron(g))))
+  }
+
+  levels <- as.integer(levels)
+
+  # One level at a time, so each level's children are read at their own
+  # resolution.
+  front <- lapply(seq_along(ids), function(k) ids[k])
+  for (step in seq_len(levels)) {
+    front <- isea_children_one_level(front, g@resolution + step - 1L, g)
+  }
+  front
+}
+
+#' The Hex9 cells `levels` resolutions finer whose canonical ancestor is each
+#' cell
+#'
+#' One level down, the nine canonical children. Further down, Griffin's owned
+#' sub-zones ('libhex9''s \code{hex9_owned_cells}): the cells holding their
+#' mode-0 half in the cell, 9^levels of them, which partition every
+#' resolution. A cell straddling the edge of its parent's ancestor can be owned
+#' by that ancestor's neighbour, so the candidates are the descendants, by
+#' children of children, of the cell and its neighbours.
+#' @param ids Cell IDs (integer64)
+#' @param g A Hex9 grid
+#' @param levels Levels down, 1 or more
+#' @return List of sorted cell ID vectors, one per cell
+#' @noRd
+hex9_owned_cells <- function(ids, g, levels) {
+  out <- rep(list(ids[0]), length(ids))
+  have <- which(!is.na(ids))
+  if (!length(have)) return(out)
+  around <- get_neighbors(ids[have], g, include_self = TRUE)
+  front <- cell_id_unlist(around)
+  slot <- rep(seq_along(have), lengths(around))
+  for (step in seq_len(levels)) {
+    kids <- cpp_hex9_children(front, g@resolution + step - 1L)
+    slot <- rep(slot, lengths(kids))
+    front <- cell_id_unlist(kids)
+  }
+  owner <- cpp_hex9_ancestor(front, g@resolution + levels, levels)
+  mine <- owner == ids[have][slot]
+  at <- split(which(mine), factor(slot[mine], levels = seq_along(have)))
+  if (any(lengths(at) != 9^levels)) {
+    stop("hexify internal error: a Hex9 cell owning other than 9^levels cells",
+         call. = FALSE)
+  }
+  out[have] <- lapply(at, function(i) sort(front[i]))
+  out
+}
+
+#' The same grid at another resolution
+#'
+#' Keeps the grid's type, aperture, radius, CRS, orientation, face projection,
+#' solid and ellipsoid. A per-level aperture spelling is read at the new resolution
+#' through aperture_at_resolution(), which takes its leading levels.
+#' @param g HexGridInfo object
+#' @param resolution Resolution of the returned grid
+#' @return HexGridInfo object
+#' @noRd
+grid_at_resolution <- function(g, resolution) {
+  if (is_h3_grid(g)) {
+    return(hex_grid(resolution = resolution, type = "h3", crs = g@crs,
+                    radius_km = grid_radius_km(g)))
+  }
+  hex_grid(resolution = resolution,
+           aperture = aperture_at_resolution(g@aperture, resolution),
+           crs = g@crs, radius_km = grid_radius_km(g),
+           orientation = grid_orientation(g),
+           projection = grid_projection(g),
+           polyhedron = grid_polyhedron(g),
+           ellipsoid = if (length(grid_ellipsoid(g))) unname(grid_ellipsoid(g)))
+}
+
+#' Children of ISEA cells, one resolution down
+#'
+#' A child is a cell whose parent is this one, so the children are read back
+#' from `get_parent()` over a candidate set. Two things generate candidates.
+#' Appending a digit to the parent's index names the children directly, which is
+#' what makes the two operations inverse, but the vertices of the solid sit at
+#' the corner of several quads and so have an index spelling in each: the
+#' children spelled under the other quads are not reached from the one spelling
+#' `cell_to_index()` returns, and a digit that names no cell at all comes back
+#' out of range or NA. The ring of child cells around the parent's centre reaches
+#' those, since neighbours are found on the sphere rather than in one quad's
+#' lattice. The parent test then decides which candidates are children.
+#'
+#' @param front List of integer64 vectors of cell IDs, one per requested cell
+#' @param resolution Resolution the cells in `front` are at
+#' @param g The grid the cells came from
+#' @return A list of the same length, each element the children, sorted
+#' @noRd
+isea_children_one_level <- function(front, resolution, g) {
+  parents <- unique(cell_id_unlist(front))
+  if (length(parents) == 0) {
+    return(front)
   }
 
   index_type <- index_type_for_aperture(g@aperture)
   aperture_int <- aperture_to_int(g@aperture)
-  levels <- as.integer(levels)
+  child_res <- resolution + 1L
 
-  # cpp_get_children_indices() expands one level, so `levels` levels down is
-  # that many expansions of the whole front.
-  lapply(as.numeric(cell_id), function(id) {
-    idx <- isea_cell_to_index_one(id, g@resolution, aperture_int, index_type)
-    for (step in seq_len(levels)) {
-      idx <- unlist(lapply(idx, cpp_get_children_indices,
-                           aperture = aperture_int, index_type = index_type),
-                    use.names = FALSE)
-    }
-    vapply(idx, isea_index_to_cell_one, numeric(1),
-           aperture_int = aperture_int, index_type = index_type,
-           USE.NAMES = FALSE)
+  parent_grid <- grid_at_resolution(g, resolution)
+  child_grid <- grid_at_resolution(g, child_res)
+  n_child <- aperture_n_cells(g@aperture, child_res, grid_polyhedron(g))
+
+  icosa <- icosa_arg(g)
+  parent_idx <- isea_cells_to_index(parents, resolution, aperture_int, index_type,
+                                    icosa)
+  kids <- cpp_get_children_indices(icosa, parent_idx, aperture = aperture_int,
+                                   index_type = index_type)
+  flat <- isea_index_to_cells(unlist(kids, use.names = FALSE), aperture_int,
+                              index_type, icosa)
+  expansion <- unname(split(flat, factor(rep(seq_along(kids), lengths(kids)),
+                                         levels = seq_along(kids))))
+
+  centre <- cell_to_lonlat(parents, parent_grid)
+  central <- lonlat_to_cell(centre$lon_deg, centre$lat_deg, child_grid)
+  ring <- get_neighbors(central, child_grid)
+
+  candidates <- lapply(seq_along(parents), function(k) {
+    cand <- unique(c(expansion[[k]], central[k], ring[[k]]))
+    cand[!is.na(cand) & cand >= 1L & cand <= n_child]
   })
+
+  cand <- cell_id_unlist(candidates)
+  cand_parent <- rep(seq_along(parents), lengths(candidates))
+  pool <- unique(cand)
+  pool_parent <- get_parent(pool, child_grid)
+  keep <- which(pool_parent[match(cand, pool)] == parents[cand_parent])
+  children <- unname(split(cand[keep], factor(cand_parent[keep],
+                                              levels = seq_along(parents))))
+
+  ids <- cell_id_unlist(front)
+  kids <- children[match(ids, parents)]
+  slot <- rep(rep(seq_along(front), lengths(front)), lengths(kids))
+  lapply(unname(split(cell_id_unlist(kids),
+                      factor(slot, levels = seq_along(front)))),
+         function(x) sort(unique(x)))
 }

@@ -2,20 +2,37 @@
 % Please edit documentation in R/hexify_projection.R
 \name{hexify_forward}
 \alias{hexify_forward}
-\title{Forward Snyder projection}
+\title{Forward Face Projection}
 \usage{
-hexify_forward(lon, lat)
+hexify_forward(
+  lon,
+  lat,
+  projection = c("isea", "fuller", "ivea", "ak", "akw"),
+  polyhedron = c("icosahedron", "octahedron", "tetrahedron")
+)
 }
 \arguments{
 \item{lon}{Longitude in degrees}
 
 \item{lat}{Latitude in degrees}
+
+\item{projection}{Face projection: \code{"isea"} (Snyder's equal-area
+projection), \code{"ivea"} (van Leeuwen and Strebe's vertex-oriented
+equal-area projection), \code{"fuller"} (Fuller's projection, defined
+on the icosahedron only), \code{"ak"} (Kaseorg's octahedral
+projection) or \code{"akw"} (Kaseorg's with Hex9's trained warp), both
+defined on the octahedron only}
+
+\item{polyhedron}{The solid: "icosahedron" (default), "octahedron" or
+"tetrahedron", in its default orientation. Snyder (1992) gives his
+equal-area projection for each; its angular distortion grows with the
+faces' size.}
 }
 \value{
 Named numeric vector: c(face, tx, ty)
 }
 \description{
-Projects geographic coordinates onto the icosahedron, returning
+Projects geographic coordinates onto a face of the solid, returning
 face index and planar coordinates (tx, ty).
 }
 \details{
@@ -25,17 +42,15 @@ typically in range [0, 1].
 \examples{
 result <- hexify_forward(16.37, 48.21)
 # result["face"], result["icosa_triangle_x"], result["icosa_triangle_y"]
+hexify_forward(16.37, 48.21, polyhedron = "tetrahedron")
 }
 \seealso{
 Other projection:
 \code{\link[=hexify_build_icosa]{hexify_build_icosa()}},
 \code{\link[=hexify_face_centers]{hexify_face_centers()}},
 \code{\link[=hexify_forward_to_face]{hexify_forward_to_face()}},
-\code{\link[=hexify_get_precision]{hexify_get_precision()}},
 \code{\link[=hexify_inverse]{hexify_inverse()}},
-\code{\link[=hexify_projection_stats]{hexify_projection_stats()}},
-\code{\link[=hexify_set_precision]{hexify_set_precision()}},
-\code{\link[=hexify_set_verbose]{hexify_set_verbose()}},
 \code{\link[=hexify_which_face]{hexify_which_face()}}
 }
 \concept{projection}
+\keyword{internal}

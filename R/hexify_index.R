@@ -13,19 +13,20 @@
 # INDEX STRING OPERATIONS
 # =============================================================================
 
-#' Convert cell coordinates to index string
+#' Convert Cell Coordinates to Index String
 #'
 #' Converts cell coordinates (`face`, `i`, `j`) to a hierarchical index string.
 #' The index type is selected from `aperture` when `index_type = "auto"`.
 #'
-#' @param face Face/quad number (0-19)
-#' @param i I coordinate
-#' @param j J coordinate
+#' @param face Face/quad numbers (0-19)
+#' @param i I coordinates
+#' @param j J coordinates
 #' @param resolution Resolution level
 #' @param aperture Aperture (3, 4, or 7)
 #' @param index_type Index encoding: "auto" (default), "z3", "z7", or "zorder"
 #'
-#' @return A character vector of index strings.
+#' @return A character vector of index strings, one per cell. `face`, `i` and
+#'   `j` are read in step and must be the same length.
 #'
 #' @details
 #' Default index types by aperture:
@@ -35,10 +36,11 @@
 #'
 #' A Z7 index has the form `BBd1...dr`, where `BB` is the two-digit base
 #' cell (00--11), `r` is the resolution, and every child digit is in 0--6.
-#' hexify's Z7 encoding is bijective: decoding and re-encoding a valid index
-#' returns the same string. It follows DGGRID's Z7 layout for ordinary cells,
-#' but retains distinct indices in pentagon regions where DGGRID's encoder can
-#' map different cells to the same string.
+#' It is IGEO7's Z7 index, the string DGGRID writes for the same cell, and
+#' decoding and re-encoding a valid index returns the same string. `BB` is
+#' the pentagon the cell descends from, which need not be `face`. Under each
+#' pentagon one direction is missing: a string whose first nonzero digit is 2
+#' (base cells 00--05) or 5 (06--11) names no cell.
 #'
 #' @family hierarchical index
 #' @keywords internal
@@ -54,23 +56,25 @@ hexify_cell_to_index <- function(face, i, j, resolution, aperture = 3L,
   index_type <- match.arg(index_type)
   validate_resolution(resolution)
   validate_aperture(aperture)
+  validate_same_length(list(face = face, i = i, j = j), "hexify_cell_to_index")
   cpp_cell_to_index(
-    as.integer(face), as.numeric(i), as.numeric(j),
+    numeric(0), as.integer(face), as.numeric(i), as.numeric(j),
     as.integer(resolution), as.integer(aperture), index_type
   )
 }
 
-#' Convert index string to cell coordinates
+#' Convert Index String to Cell Coordinates
 #'
 #' Decodes a hierarchical index string back to its cell coordinates and
 #' resolution. For Z7, valid indices round-trip exactly through
 #' [hexify_cell_to_index()].
 #'
-#' @param index Index string
+#' @param index Character vector of index strings
 #' @param aperture Aperture (3, 4, or 7)
 #' @param index_type Index encoding used. Default "auto" infers from aperture.
 #'
-#' @return A list with `face`, `i`, `j`, and `resolution`.
+#' @return A data frame with columns `face`, `i`, `j` and `resolution`, one row
+#'   per index.
 #'
 #' @family hierarchical index
 #' @keywords internal
@@ -86,21 +90,22 @@ hexify_index_to_cell <- function(index, aperture = 3L,
                                   index_type = c("auto", "z3", "z7", "zorder")) {
   index_type <- match.arg(index_type)
   validate_aperture(aperture)
-  cpp_index_to_cell(as.character(index), as.integer(aperture), index_type)
+  cpp_index_to_cell(numeric(0), as.character(index), as.integer(aperture), index_type)
 }
 
-#' Convert longitude/latitude to index string
+#' Convert Longitude/Latitude to Index String
 #'
 #' Projects geographic coordinates to grid cells and returns their hierarchical
 #' index strings. Inputs are vectorized over `lon` and `lat`.
 #'
-#' @param lon Longitude in degrees
-#' @param lat Latitude in degrees
+#' @param lon Longitudes in degrees
+#' @param lat Latitudes in degrees
 #' @param resolution Resolution level
 #' @param aperture Aperture (3, 4, or 7)
 #' @param index_type Index encoding: "auto" (default), "z3", "z7", or "zorder"
 #'
-#' @return A character vector of index strings.
+#' @return A character vector of index strings, one per point. `lon` and `lat`
+#'   must be the same length.
 #'
 #' @family hierarchical index
 #' @keywords internal
@@ -115,21 +120,23 @@ hexify_lonlat_to_index <- function(lon, lat, resolution, aperture = 3L,
   index_type <- match.arg(index_type)
   validate_resolution(resolution)
   validate_aperture(aperture)
-  cpp_lonlat_to_index(lon, lat, as.integer(resolution),
+  validate_same_length(list(lon = lon, lat = lat), "hexify_lonlat_to_index")
+  cpp_lonlat_to_index(numeric(0), as.numeric(lon), as.numeric(lat), as.integer(resolution),
                       as.integer(aperture), index_type)
 }
 
-#' Convert index string to longitude/latitude
+#' Convert Index String to Longitude/Latitude
 #'
 #' Returns the geographic coordinates of an indexed cell's center. This is a
 #' cell-level inverse of [hexify_lonlat_to_index()]: the returned point is the
 #' center, not necessarily the original input point.
 #'
-#' @param index Index string
+#' @param index Character vector of index strings
 #' @param aperture Aperture (3, 4, or 7)
 #' @param index_type Index encoding. Default "auto" infers from aperture.
 #'
-#' @return A named numeric vector with `lon` and `lat` in degrees.
+#' @return A data frame with `lon` and `lat` columns in degrees, one row per
+#'   index.
 #'
 #' @family hierarchical index
 #' @keywords internal
@@ -140,22 +147,22 @@ hexify_index_to_lonlat <- function(index, aperture = 3L,
                                     index_type = c("auto", "z3", "z7", "zorder")) {
   index_type <- match.arg(index_type)
   validate_aperture(aperture)
-  cpp_index_to_lonlat(as.character(index), as.integer(aperture), index_type)
+  cpp_index_to_lonlat(numeric(0), as.character(index), as.integer(aperture), index_type)
 }
 
 # =============================================================================
 # INDEX HIERARCHY OPERATIONS
 # =============================================================================
 
-#' Get parent index
+#' Get Parent Index
 #'
 #' Returns the parent index (one resolution coarser).
 #'
-#' @param index Index string
+#' @param index Character vector of index strings
 #' @param aperture Aperture (3, 4, or 7)
 #' @param index_type Index encoding. Default "auto".
 #'
-#' @return Parent index string
+#' @return Character vector of parent index strings
 #'
 #' @family hierarchical index
 #' @keywords internal
@@ -167,15 +174,15 @@ hexify_get_parent <- function(index, aperture = 3L,
   cpp_get_parent_index(as.character(index), as.integer(aperture), index_type)
 }
 
-#' Get children indices
+#' Get Children Indices
 #'
 #' Returns all children indices (one resolution finer).
 #'
-#' @param index Index string
+#' @param index Character vector of index strings
 #' @param aperture Aperture (3, 4, or 7)
 #' @param index_type Index encoding. Default "auto".
 #'
-#' @return Character vector of child indices
+#' @return A list of character vectors, the child indices of each input index
 #'
 #' @family hierarchical index
 #' @keywords internal
@@ -184,18 +191,19 @@ hexify_get_children <- function(index, aperture = 3L,
                                  index_type = c("auto", "z3", "z7", "zorder")) {
   index_type <- match.arg(index_type)
   validate_aperture(aperture)
-  cpp_get_children_indices(as.character(index), as.integer(aperture), index_type)
+  cpp_get_children_indices(numeric(0), as.character(index), as.integer(aperture),
+                           index_type)
 }
 
-#' Get index resolution
+#' Get Index Resolution
 #'
 #' Returns the resolution level encoded in an index string.
 #'
-#' @param index Index string
+#' @param index Character vector of index strings
 #' @param aperture Aperture (3, 4, or 7)
 #' @param index_type Index encoding. Default "auto".
 #'
-#' @return Integer resolution level
+#' @return Integer vector of resolution levels
 #'
 #' @family hierarchical index
 #' @keywords internal
@@ -207,14 +215,15 @@ hexify_get_resolution <- function(index, aperture = 3L,
   cpp_get_index_resolution(as.character(index), as.integer(aperture), index_type)
 }
 
-#' Compare two indices
+#' Compare Two Indices
 #'
 #' Lexicographic comparison of two index strings.
 #'
-#' @param idx1 First index string
-#' @param idx2 Second index string
+#' @param idx1 First index strings
+#' @param idx2 Second index strings
 #'
-#' @return Integer: -1 if idx1 < idx2, 0 if equal, 1 if idx1 > idx2
+#' @return Integer vector: -1 where idx1 < idx2, 0 where equal, 1 where
+#'   idx1 > idx2. The two are read in step, and either may be length one.
 #'
 #' @family hierarchical index
 #' @keywords internal
@@ -227,7 +236,7 @@ hexify_compare_indices <- function(idx1, idx2) {
 # INTEGER CELL IDs
 # =============================================================================
 
-#' Convert longitude/latitude to cell ID
+#' Convert Longitude/Latitude to Cell ID
 #'
 #' Converts geographic coordinates to DGGRID-compatible cell identifiers.
 #' This is the primary function for geocoding points to grid cells.
@@ -237,7 +246,7 @@ hexify_compare_indices <- function(idx1, idx2) {
 #' @param resolution Grid resolution (integer >= 0)
 #' @param aperture Grid aperture (3, 4, or 7)
 #'
-#' @return Numeric vector of cell IDs (1-based)
+#' @return \code{bit64::integer64} vector of cell IDs, from 1
 #'
 #' @details
 #' Returns DGGRID-compatible cell identifiers. The cell ID
@@ -258,15 +267,15 @@ hexify_lonlat_to_cell <- function(lon, lat, resolution, aperture) {
   validate_lat(lat)
   validate_resolution(resolution)
   validate_aperture(aperture)
-  cpp_lonlat_to_cell(lon, lat, resolution, aperture)
+  cpp_lonlat_to_cell(numeric(0), lon, lat, resolution, aperture, integer(0))
 }
 
-#' Convert cell ID to longitude/latitude
+#' Convert Cell ID to Longitude/Latitude
 #'
 #' Converts cell identifiers back to cell center coordinates.
 #' This is the inverse of \code{\link{hexify_lonlat_to_cell}}.
 #'
-#' @param cell_id Numeric vector of cell IDs (1-based)
+#' @param cell_id Cell IDs, from 1: integer64, or whole numbers below 2^53
 #' @param resolution Grid resolution (integer >= 0)
 #' @param aperture Grid aperture (3, 4, or 7)
 #'
@@ -283,49 +292,28 @@ hexify_lonlat_to_cell <- function(lon, lat, resolution, aperture) {
 hexify_cell_to_lonlat <- function(cell_id, resolution, aperture) {
   validate_resolution(resolution)
   validate_aperture(aperture)
+  cell_id <- as_cell_id(cell_id)
   validate_cell_id(cell_id, resolution, aperture)
-  cpp_cell_to_lonlat(cell_id, resolution, aperture)
-}
-
-#' Get cell info from cell ID
-#'
-#' Converts cell ID to cell components (quad, i, j).
-#'
-#' @param cell_id Numeric vector of cell IDs (1-based)
-#' @param resolution Grid resolution (integer >= 0)
-#' @param aperture Grid aperture (3, 4, or 7)
-#'
-#' @return Data frame with quad, i, j columns
-#'
-#' @family coordinate conversion
-#' @keywords internal
-#' @export
-#' @examples
-#' info <- hexify_cell_id_to_quad_ij(1702, resolution = 5, aperture = 3)
-hexify_cell_id_to_quad_ij <- function(cell_id, resolution, aperture) {
-  validate_resolution(resolution)
-  validate_aperture(aperture)
-  validate_cell_id(cell_id, resolution, aperture)
-  result <- cpp_cell_to_quad_ij(cell_id, resolution, aperture)
-  as.data.frame(result)
+  cpp_cell_to_lonlat(numeric(0), cell_id, resolution, aperture, integer(0))
 }
 
 # =============================================================================
 # Z7 SPECIAL OPERATIONS
 # =============================================================================
 
-#' Get canonical form of Z7 index
+#' Get Canonical Form of Z7 Index
 #'
-#' Decodes and re-encodes a Z7 index until it reaches a stable form. Current Z7
-#' indices are bijective, so every valid index is already canonical and this
-#' function normally returns its input unchanged. It remains available for
-#' validating or normalizing indices created by older hexify versions.
+#' Decodes and re-encodes a Z7 index until it reaches a stable form. Every
+#' valid index is already canonical and comes back unchanged. A string whose
+#' first nonzero digit is the direction its pentagon base cell lacks names no
+#' cell; it decodes, as in DGGRID, to the lattice point its digits reach, and
+#' this function returns the index of the cell there.
 #'
-#' @param index A length-one Z7 index string.
-#' @param max_iterations Maximum number of decode/encode iterations. This is a
-#'   safety bound for legacy indices; the default is 128.
+#' @param index Character vector of Z7 index strings.
+#' @param max_iterations Maximum number of decode/encode iterations; the
+#'   default is 128.
 #'
-#' @return A length-one character string containing the stable index.
+#' @return A character vector of stable indices.
 #'
 #' @family hierarchical index
 #' @keywords internal
@@ -342,14 +330,14 @@ hexify_cell_id_to_quad_ij <- function(cell_id, resolution, aperture) {
 #'   "110001"
 #' )
 hexify_z7_canonical <- function(index, max_iterations = 128L) {
-  cpp_z7_canonical_form(as.character(index), as.integer(max_iterations))
+  cpp_z7_canonical_form(numeric(0), as.character(index), as.integer(max_iterations))
 }
 
 # =============================================================================
 # INDEX TYPE UTILITIES
 # =============================================================================
 
-#' Check if index type is valid for aperture
+#' Check If Index Type Is Valid for Aperture
 #'
 #' @param aperture Aperture (3, 4, or 7)
 #' @param index_type Index type to check
@@ -365,7 +353,7 @@ hexify_is_valid_index_type <- function(aperture,
   cpp_is_valid_index_type(as.integer(aperture), index_type)
 }
 
-#' Get default index type for aperture
+#' Get Default Index Type for Aperture
 #'
 #' Returns the recommended index type:
 #' - Aperture 3: "z3"
@@ -387,7 +375,7 @@ hexify_default_index_type <- function(aperture) {
 # RESOLUTION CONVERSION (ISEA3H-specific)
 # =============================================================================
 
-#' Convert effective resolution to area
+#' Convert Effective Resolution to Area
 #'
 #' Calculates approximate cell area for ISEA3H (aperture 3) grids.
 #' Based on calibration: eff_res 10 = 863.8006 km^2.
@@ -403,7 +391,7 @@ hexify_eff_res_to_area <- function(eff_res) {
   ISEA3H_RES10_AREA_KM2 * (3^(10 - eff_res))
 }
 
-#' Convert area to effective resolution
+#' Convert Area to Effective Resolution
 #'
 #' Finds the effective resolution that gives approximately the target area.
 #'
@@ -418,7 +406,7 @@ hexify_area_to_eff_res <- function(area_km2) {
   10 - log(area_km2 / ISEA3H_RES10_AREA_KM2) / log(3)
 }
 
-#' Convert effective resolution to index resolution
+#' Convert Effective Resolution to Index Resolution
 #'
 #' For aperture 3: res_index = 2 * eff_res - 1 for odd index resolutions.
 #'
@@ -434,7 +422,7 @@ hexify_eff_res_to_resolution <- function(eff_res) {
   as.integer(2 * eff_res - 1)
 }
 
-#' Convert index resolution to effective resolution
+#' Convert Index Resolution to Effective Resolution
 #'
 #' @param resolution Index resolution
 #'

@@ -2,7 +2,7 @@
 % Please edit documentation in R/hexify_index.R
 \name{hexify_lonlat_to_cell}
 \alias{hexify_lonlat_to_cell}
-\title{Convert longitude/latitude to cell ID}
+\title{Convert Longitude/Latitude to Cell ID}
 \usage{
 hexify_lonlat_to_cell(lon, lat, resolution, aperture)
 }
@@ -16,7 +16,7 @@ hexify_lonlat_to_cell(lon, lat, resolution, aperture)
 \item{aperture}{Grid aperture (3, 4, or 7)}
 }
 \value{
-Numeric vector of cell IDs (1-based)
+\code{bit64::integer64} vector of cell IDs, from 1
 }
 \description{
 Converts geographic coordinates to DGGRID-compatible cell identifiers.
@@ -36,7 +36,6 @@ cell_id <- hexify_lonlat_to_cell(0, 45, resolution = 5, aperture = 3)
 \code{\link{hexify_cell_to_lonlat}} for the inverse operation
 
 Other coordinate conversion:
-\code{\link[=hexify_cell_id_to_quad_ij]{hexify_cell_id_to_quad_ij()}},
 \code{\link[=hexify_cell_to_icosa_tri]{hexify_cell_to_icosa_tri()}},
 \code{\link[=hexify_cell_to_lonlat]{hexify_cell_to_lonlat()}},
 \code{\link[=hexify_cell_to_plane]{hexify_cell_to_plane()}},

@@ -53,36 +53,15 @@ hex_extract <- function(raster, grid, cells = NULL, boundary = NULL) {
 
   g <- extract_grid(grid)
 
-  # Get cell centers. `cells`/`boundary`, when supplied, take precedence over
-  # a HexData grid's own already-assigned cells (matching hex_zonal()) --
-  # otherwise they'd be silently ignored whenever `grid` is a HexData object.
-  if (!is.null(cells)) {
-    cell_ids <- cells
-    ll <- cell_to_lonlat(cells, g)
-    centers <- cbind(lon = ll$lon_deg, lat = ll$lat_deg)
-  } else if (!is.null(boundary)) {
-    # Generate cells within boundary. grid_clip() returns polygon geometries
-    # (a cell_id column, no lon/lat), so cell centers are recomputed the same
-    # way as the 'cells' branch above.
-    cell_data <- grid_clip(boundary, g)
-    cell_ids <- cell_data$cell_id
-    ll <- cell_to_lonlat(cell_ids, g)
-    centers <- cbind(lon = ll$lon_deg, lat = ll$lat_deg)
-  } else if (is_hex_data(grid)) {
-    cell_ids <- grid@cell_id
-    centers <- grid@cell_center
-  } else {
-    stop("Provide a HexData object, cell IDs via 'cells', or a 'boundary' polygon")
-  }
+  u_cell_ids <- raster_target_cells(grid, g, cells, boundary)
+  ll <- cell_to_lonlat(u_cell_ids, g)
 
-  # Keep unique cells only
-  uid <- !duplicated(cell_ids)
-  u_cell_ids <- cell_ids[uid]
-  u_centers <- centers[uid, , drop = FALSE]
-
-  # Extract raster values at cell centers
-  pts <- terra::vect(u_centers, crs = grid_crs_wkt(g))
-  extracted <- terra::extract(raster, pts)
+  # Extract raster values at cell centers, read in the raster's own CRS
+  pts <- sf::st_as_sf(data.frame(lon = ll$lon_deg, lat = ll$lat_deg),
+                      coords = c("lon", "lat"), crs = grid_crs(g))
+  pts <- geometry_in_crs(pts, raster_crs(raster), "hex_extract",
+                         "the cell-center geometry", "raster")
+  extracted <- terra::extract(raster, terra::vect(pts))
 
   # Build result
   result <- data.frame(cell_id = u_cell_ids, stringsAsFactors = FALSE)
@@ -92,4 +71,29 @@ hex_extract <- function(raster, grid, cells = NULL, boundary = NULL) {
   }
   result <- cbind(result, extracted)
   result
+}
+
+#' Cells a raster summary runs over
+#'
+#' Explicit `cells` come first, then the cells meeting `boundary`, then a
+#' HexData object's own cells.
+#'
+#' @param grid The HexGridInfo or HexData object the caller was given
+#' @param g The HexGridInfo extracted from `grid`
+#' @param cells Optional cell IDs
+#' @param boundary Optional sf polygon
+#' @return Unique, non-missing cell IDs
+#' @noRd
+raster_target_cells <- function(grid, g, cells = NULL, boundary = NULL) {
+  ids <- if (!is.null(cells)) {
+    cells
+  } else if (!is.null(boundary)) {
+    grid_clip(boundary, g)$cell_id
+  } else if (is_hex_data(grid)) {
+    grid@cell_id
+  } else {
+    stop("Provide a HexData object, cell IDs via 'cells', or a 'boundary' polygon")
+  }
+  if (!is_h3_grid(g)) ids <- as_cell_id(ids)
+  unique(ids[!is.na(ids)])
 }

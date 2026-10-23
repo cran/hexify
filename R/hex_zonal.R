@@ -52,23 +52,13 @@ hex_zonal <- function(raster, grid, fun = "mean", boundary = NULL,
 
   g <- extract_grid(grid)
 
-  # Get cell IDs
-  if (!is.null(cells)) {
-    cell_ids <- unique(cells[!is.na(cells)])
-  } else if (is_hex_data(grid)) {
-    cell_ids <- unique(grid@cell_id)
-  } else if (!is.null(boundary)) {
-    cell_data <- grid_clip(boundary, g)
-    cell_ids <- unique(cell_data$cell_id)
-  } else {
-    stop("Provide a HexData object, cell IDs via 'cells', or a 'boundary' polygon")
-  }
+  cell_ids <- raster_target_cells(grid, g, cells, boundary)
 
-  # Generate hex polygons
+  # Generate hex polygons, read in the raster's own CRS
   hex_sf <- cell_to_sf(cell_ids, g)
-
-  # Convert to terra SpatVector
-  hex_vect <- terra::vect(hex_sf)
+  hex_vect <- terra::vect(geometry_in_crs(hex_sf, raster_crs(raster),
+                                          "hex_zonal", "the grid's cell geometry",
+                                          "raster"))
 
   # Extract zonal statistics. terra::extract() has no built-in "count"
   # function, so translate it to a count of non-NA pixels per cell.

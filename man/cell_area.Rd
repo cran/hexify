@@ -2,7 +2,7 @@
 % Please edit documentation in R/grid_helpers.R
 \name{cell_area}
 \alias{cell_area}
-\title{Compute per-cell area in km²}
+\title{Compute Per-Cell Area in km²}
 \usage{
 cell_area(cell_id = NULL, grid)
 }
@@ -18,21 +18,35 @@ used.}
 Named numeric vector of areas in km², one per \code{cell_id}.
 }
 \description{
-Returns the area of each cell in square kilometers. For ISEA grids, all
-cells have the same area (equal-area property). For H3 grids, each cell
-has a different geodesic area depending on its location.
+Returns the area of each cell in square kilometers. On the ISEA and IVEA
+projections every hexagon of a resolution has the same area, the 12
+pentagons of the icosahedron 5/6 of it, the 6 squares of the
+octahedron 4/6 of it and the 4 triangles of the tetrahedron half of it. On
+the Fuller projection and for H3 grids, the area varies from cell to cell.
 }
 \details{
-For ISEA grids the area is constant across all cells and is read directly
-from the grid specification.
+On the ISEA and IVEA projections, both equal-area, every hexagon of a
+resolution has the same area. A vertex cell, centred on a vertex of the
+solid where \eqn{k} faces meet, covers \eqn{k} of a hexagon's six sixths,
+so a grid of \eqn{N} cells on a body of area \eqn{S} has hexagons of area
+\eqn{S / (N - 2)}, pentagons of \eqn{(5/6) S / (N - 2)} on the
+icosahedron, squares of \eqn{(4/6) S / (N - 2)} on the octahedron and
+triangles of \eqn{(3/6) S / (N - 2)} on the tetrahedron. The
+grid's \code{area_km2} is the mean, \eqn{S / N}.
 
-For H3 grids the area varies by latitude. The vendored 'H3' library computes
+On the Fuller projection (\code{hex_grid(projection = "fuller")}) cells are
+not equal-area. Each cell's area is its solid angle, summed over its true
+boundary, times the body's area over \eqn{4\pi}, so the cells of a grid add
+up to the body's area.
+
+For H3 grids the area varies from cell to cell, by about a factor of 2
+across the hexagons of a resolution. The vendored 'H3' library computes
 each cell's spherical polygon area as a solid angle, which this function
 reads on the grid's body, so a grid built with \code{radius_km} reports that
 body's areas.
 }
 \examples{
-# ISEA: constant area
+# ISEA: one area for every hexagon
 grid <- hex_grid(area_km2 = 1000)
 cells <- lonlat_to_cell(c(0, 10, 20), c(45, 50, 55), grid)
 cell_area(cells, grid)

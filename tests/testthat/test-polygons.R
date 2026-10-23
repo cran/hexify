@@ -22,20 +22,36 @@ test_that("hexify_cell_to_sf returns data frame with return_sf=FALSE", {
   expect_true(all(c("cell_id", "lon", "lat", "order") %in% names(result)))
 })
 
-test_that("hexify_cell_to_sf returns 7 vertices per hexagon (closed polygon)", {
+# Each ring is closed, numbered from 1, and runs through the cell's corners
+expect_rings_through_corners <- function(result, hex_ids, resolution, aperture) {
+  corners <- cpp_cell_to_corners(numeric(0), as_cell_id(hex_ids), resolution, aperture,
+                                 integer(0))
+  for (k in seq_along(hex_ids)) {
+    ring <- result[result$cell_id == hex_ids[k], ]
+    expect_equal(ring$order, seq_len(nrow(ring)))
+    expect_equal(unlist(ring[1, c("lon", "lat")]), unlist(ring[nrow(ring), c("lon", "lat")]))
+    for (v in seq_len(nrow(corners[[k]]) - 1L)) {
+      gap <- abs(ring$lon - corners[[k]][v, 1]) + abs(ring$lat - corners[[k]][v, 2])
+      expect_lt(min(gap), 1e-9)
+    }
+  }
+}
+
+test_that("hexify_cell_to_sf returns a closed ring through each hexagon's 6 corners", {
   hex_ids <- c(12847, 12532, 22178)
 
   result <- hexify_cell_to_sf(hex_ids, resolution = 10, aperture = 3, return_sf = FALSE)
 
-  expect_equal(nrow(result), length(hex_ids) * 7)
-  expect_equal(unique(result$order), 1:7)
+  expect_true(all(vapply(cpp_cell_to_corners(numeric(0), as_cell_id(hex_ids), 10L, 3L,
+                                             integer(0)), nrow, integer(1)) == 7L))
+  expect_rings_through_corners(result, hex_ids, 10L, 3L)
 })
 
-test_that("hexify_cell_to_sf returns 6 vertices for a cell at an icosahedral vertex", {
+test_that("hexify_cell_to_sf returns a closed ring through a vertex cell's 5 corners", {
   result <- hexify_cell_to_sf(1, resolution = 3, aperture = 3, return_sf = FALSE)
 
-  expect_equal(nrow(result), 6)
-  expect_equal(result$order, 1:6)
+  expect_equal(nrow(cpp_cell_to_corners(numeric(0), as_cell_id(1), 3L, 3L, integer(0))[[1]]), 6L)
+  expect_rings_through_corners(result, 1, 3L, 3L)
 })
 
 test_that("hexify_cell_to_sf returns valid coordinates", {
@@ -81,7 +97,7 @@ test_that("hexify_cell_to_sf removes duplicates", {
   result <- hexify_cell_to_sf(hex_ids, resolution = 10, aperture = 3, return_sf = FALSE)
 
   expect_equal(length(unique(result$cell_id)), 2)
-  expect_equal(nrow(result), 2 * 7)
+  expect_rings_through_corners(result, c(12847, 12532), 10L, 3L)
 })
 
 test_that("hexify_cell_to_sf handles NA values", {
@@ -95,20 +111,34 @@ test_that("hexify_cell_to_sf handles NA values", {
 test_that("hexify_cell_to_sf validates aperture", {
   expect_error(
     hexify_cell_to_sf(c(12847), resolution = 10, aperture = 5),
-    "aperture must be 3, 4, or 7"
+    "Aperture must be 3, 4, 7"
   )
 })
 
 test_that("hexify_cell_to_sf validates resolution", {
   expect_error(
     hexify_cell_to_sf(c(12847), resolution = -1, aperture = 3),
-    "resolution must be between 0 and 30"
+    "Resolution must be between 0 and 30"
   )
 
   expect_error(
     hexify_cell_to_sf(c(12847), resolution = 31, aperture = 3),
-    "resolution must be between 0 and 30"
+    "Resolution must be between 0 and 30"
   )
+})
+
+test_that("hexify_cell_to_sf takes a mixed aperture and the grid's CRS", {
+  skip_if_not_installed("sf")
+
+  grid <- hex_grid(resolution = 5, aperture = "4/3")
+  ids <- lonlat_to_cell(c(0, 20), c(10, 40), grid)
+
+  rings <- hexify_cell_to_sf(ids, resolution = 5, aperture = "4/3", return_sf = FALSE)
+  expect_setequal(unique(rings$cell_id), unique(ids))
+
+  mars <- hex_grid(resolution = 5, radius_km = "mars")
+  polys <- hexify_cell_to_sf(c(100, 200), grid = mars)
+  expect_equal(sf::st_crs(polys), grid_crs(mars))
 })
 
 test_that("hexify_cell_to_sf works with aperture 4", {
@@ -117,7 +147,7 @@ test_that("hexify_cell_to_sf works with aperture 4", {
   result <- hexify_cell_to_sf(hex_ids, resolution = 8, aperture = 4, return_sf = FALSE)
 
   expect_s3_class(result, "data.frame")
-  expect_equal(nrow(result), 3 * 7)
+  expect_rings_through_corners(result, hex_ids, 8L, 4L)
 })
 
 test_that("hexify_cell_to_sf works with aperture 7", {
@@ -126,7 +156,7 @@ test_that("hexify_cell_to_sf works with aperture 7", {
   result <- hexify_cell_to_sf(hex_ids, resolution = 5, aperture = 7, return_sf = FALSE)
 
   expect_s3_class(result, "data.frame")
-  expect_equal(nrow(result), 3 * 7)
+  expect_rings_through_corners(result, hex_ids, 5L, 7L)
 })
 
 # =============================================================================
@@ -227,10 +257,10 @@ test_that("hex_corners_to_sf validates input lengths", {
 # ADDITIONAL INPUT VALIDATION
 # =============================================================================
 
-test_that("hexify_cell_to_sf validates cell_id is numeric", {
+test_that("hexify_cell_to_sf validates cell_id holds cell IDs", {
   expect_error(
     hexify_cell_to_sf("not_numeric", resolution = 10, aperture = 3),
-    "cell_id must be numeric"
+    "whole-number cell IDs"
   )
 })
 
@@ -252,7 +282,7 @@ test_that("hexify_cell_to_sf errors on all NA input", {
 # AS_SF METHOD
 # =============================================================================
 
-test_that("as_sf creates point geometry from HexData object", {
+test_that("st_as_sf creates point geometry from HexData object", {
   skip_if_not_installed("sf")
 
   df <- data.frame(
@@ -262,14 +292,14 @@ test_that("as_sf creates point geometry from HexData object", {
   )
 
   hex_data <- hexify(df, lon = "lon", lat = "lat", area_km2 = 1000)
-  result <- as_sf(hex_data, geometry = "point")
+  result <- st_as_sf(hex_data, geometry = "point")
 
   expect_s3_class(result, "sf")
   expect_equal(nrow(result), 2)
   expect_true(all(sf::st_geometry_type(result) == "POINT"))
 })
 
-test_that("as_sf creates polygon geometry from HexData object", {
+test_that("st_as_sf creates polygon geometry from HexData object", {
   skip_if_not_installed("sf")
 
   df <- data.frame(
@@ -279,7 +309,7 @@ test_that("as_sf creates polygon geometry from HexData object", {
   )
 
   hex_data <- hexify(df, lon = "lon", lat = "lat", area_km2 = 1000)
-  result <- as_sf(hex_data, geometry = "polygon")
+  result <- st_as_sf(hex_data, geometry = "polygon")
 
   expect_s3_class(result, "sf")
   expect_true(all(sf::st_geometry_type(result) == "POLYGON"))
@@ -289,10 +319,19 @@ test_that("as_sf creates polygon geometry from HexData object", {
 # RESOLUTION FROM AREA HELPER
 # =============================================================================
 
-test_that(".resolution_from_area returns valid resolution", {
-  res <- hexify:::.resolution_from_area(1000, aperture = 3)
+test_that("resolve_resolution_from_area rounds and clamps", {
+  res <- hexify:::resolve_resolution_from_area(1000, aperture = 3)
   expect_true(is.numeric(res))
   expect_true(res >= 0 && res <= 30)
+
+  exact <- hexify:::calculate_resolution_for_area(1000, 3)
+  expect_equal(hexify:::resolve_resolution_from_area(1000, 3, round = "up"), ceiling(exact))
+  expect_equal(hexify:::resolve_resolution_from_area(1000, 3, round = "down"), floor(exact))
+
+  expect_equal(hexify:::resolve_resolution_from_area(1e9, 7), 0)
+  expect_equal(hexify:::resolve_resolution_from_area(1e-12, 3), 30)
+  expect_equal(hexify:::resolve_resolution_from_area(1e9, "4/3"), 0)
+  expect_error(hexify:::resolve_resolution_from_area(1000, 3, round = "x"), "resround")
 })
 
 # =============================================================================
@@ -345,6 +384,10 @@ test_that("hexify_grid_global works with large area", {
 
   expect_s3_class(grid, "sf")
   expect_true(nrow(grid) > 0)
+
+  spec <- hex_grid(area_km2 = 10000000)
+  expect_equal(nrow(grid), hexify:::aperture_n_cells(spec@aperture, spec@resolution))
+  expect_true(all(lonlat_to_cell(c(0, 0), c(90, -90), spec) %in% grid$cell_id))
 })
 
 test_that("hexify_grid_global warns on small area", {
@@ -397,14 +440,14 @@ test_that("hexify_cell_to_sf with return_sf=FALSE produces correct structure", {
 
   expect_s3_class(result, "data.frame")
   expect_true(all(c("cell_id", "lon", "lat", "order") %in% names(result)))
-  expect_equal(nrow(result), 2 * 7)  # 7 vertices per hex
+  expect_rings_through_corners(result, hex_ids, 5L, 3L)
 })
 
 # =============================================================================
 # AS_SF ADDITIONAL TESTS
 # =============================================================================
 
-test_that("as_sf preserves all columns", {
+test_that("st_as_sf preserves all columns", {
   skip_if_not_installed("sf")
 
   df <- data.frame(
@@ -415,13 +458,13 @@ test_that("as_sf preserves all columns", {
   )
 
   hex_data <- hexify(df, lon = "lon", lat = "lat", area_km2 = 1000)
-  result <- as_sf(hex_data, geometry = "point")
+  result <- st_as_sf(hex_data, geometry = "point")
 
   expect_true("name" %in% names(result))
   expect_true("custom_col" %in% names(result))
 })
 
-test_that("as_sf polygon geometry preserves attributes", {
+test_that("st_as_sf polygon geometry preserves attributes", {
   skip_if_not_installed("sf")
 
   df <- data.frame(
@@ -431,7 +474,7 @@ test_that("as_sf polygon geometry preserves attributes", {
   )
 
   hex_data <- hexify(df, lon = "lon", lat = "lat", area_km2 = 1000)
-  result <- as_sf(hex_data, geometry = "polygon")
+  result <- st_as_sf(hex_data, geometry = "polygon")
 
   expect_s3_class(result, "sf")
   expect_true("value" %in% names(result))

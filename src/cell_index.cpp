@@ -5,7 +5,11 @@
 #include "index_z3.h"
 #include "index_zorder.h"
 #include "index_z7.h"
+#include "hex9.h"
+#include "hex9_solid.h"
 #include "coordinate_transforms.h"
+#include "polyhedron.h"
+#include "constants.h"
 #include <stdexcept>
 #include <sstream>
 #include <iomanip>
@@ -15,23 +19,14 @@ namespace hexify {
 // ---------------------------------------------------------------------------
 // Aperture-7 Z7 index path
 //
-// hexify stores each ap7 cell as its exact resolution-r surrogate (quad, i, j)
-// -- a bijective, geographically consistent coordinate. The Z7 index is the
-// bijective hierarchical encoding of it (z7::encode_bijective/decode_bijective):
-// the surrogate is expanded to its Class I substrate IJK (exact integer, one
-// aperture-7 level at odd resolutions), encoded, and coarsened back on decode.
-// The digits follow DGGRID's DgZ7StringRF except in the pentagon regions where
-// DGGRID's own encoder is non-injective (it collides distinct cells); there
-// hexify keeps a distinct, round-tripping index instead of the colliding one.
-// The leading field is quad + 12 * seed rather than the bare quad, seed naming
-// the level-0 point the hierarchy walk arrives at, which is the origin only for
-// a cell whose whole ancestry lies inside its quad.
+// hexify stores each ap7 cell as its exact resolution-r surrogate (quad, i, j).
+// The Z7 index (z7::encode/decode) expands it to its Class I substrate IJK
+// (exact integer, one aperture-7 level at odd resolutions), encodes it, and
+// coarsens it back on decode. On the icosahedron the string is IGEO7's Z7
+// index as DGGRID writes it: the leading field is the base cell, which is not
+// always the cell's quad.
 // ---------------------------------------------------------------------------
 namespace {
-  const int MAX_RES_AP3 = 30;
-  const int MAX_RES_AP4 = 30;
-  const int MAX_RES_AP7 = 20;
-  
   std::string format_quad(int quadNum) {
     std::ostringstream oss;
     oss << std::setw(2) << std::setfill('0') << quadNum;
@@ -58,6 +53,9 @@ static size_t index_digits_per_level(int aperture, IndexType index_type) {
 }
 
 bool is_valid_index_type(int aperture, IndexType index_type) {
+  if (aperture == 9 || index_type == IndexType::HEX9) {
+    return aperture == 9 && (index_type == IndexType::HEX9 || index_type == IndexType::AUTO);
+  }
   if (index_type == IndexType::AUTO) return true;
   if (index_type == IndexType::ZORDER) return true;
   if (index_type == IndexType::Z3 && aperture == 3) return true;
@@ -66,45 +64,67 @@ bool is_valid_index_type(int aperture, IndexType index_type) {
 }
 
 IndexType get_default_index_type(int aperture) {
+  if (aperture == 9) return IndexType::HEX9;
   if (aperture == 3) return IndexType::Z3;
   if (aperture == 7) return IndexType::Z7;
   if (aperture == 4) return IndexType::ZORDER;
   return IndexType::ZORDER;
 }
 
-std::string cell_to_index(int face, long long i, long long j, 
+namespace {
+
+// Aperture 9 writes libhex9's labels only
+void check_hex9_type(IndexType t) {
+  if (t != IndexType::AUTO && t != IndexType::HEX9) {
+    throw std::runtime_error("hex_index: aperture 9 (Hex9) takes index_type hex9");
+  }
+}
+
+// A Hex9 label's cell, as its quad and stored (i, j), and its level
+void hex9_label_cell(const std::string& index, int& quad, long long& i, long long& j,
+                     int& resolution) {
+  hex9::OctPoint c;
+  if (!hex9::parse_label(index, resolution, c)) {
+    throw std::runtime_error("hex_index: \"" + index + "\" is no Hex9 label");
+  }
+  hex9::cell_quad_ij(c, resolution, quad, i, j);
+}
+
+// The centre of the Hex9 cell a label names, and its level
+hex9::OctPoint hex9_label_centre(const std::string& index, int& resolution) {
+  hex9::OctPoint c;
+  if (!hex9::parse_label(index, resolution, c)) {
+    throw std::runtime_error("hex_index: \"" + index + "\" is no Hex9 label");
+  }
+  return c;
+}
+
+} // anon
+
+std::string cell_to_index(int face, long long i, long long j,
                           int resolution, int aperture,
                           IndexType index_type) {
+  if (aperture == 9) {
+    check_hex9_type(index_type);
+    hex9::OctPoint c;
+    if (!hex9::quad_ij_lattice(face, i, j, resolution, c) || !hex9::is_centre(c)) {
+      throw std::runtime_error("hex_index: a Hex9 quad coordinate that is no cell");
+    }
+    return hex9::label(c, resolution);
+  }
   // Face validation depends on aperture and resolution
-  if (aperture == 3) {
-    if (resolution == 0) {
-      if (face < 0 || face > 11) {
-        throw std::runtime_error("hex_index: invalid face number for aperture 3 resolution 0 (must be 0-11)");
-      }
-    } else {
-      if (face < 0 || face > 19) {
-        throw std::runtime_error("hex_index: invalid face number for aperture 3 (must be 0-19)");
-      }
-    }
-  } else {
-    // Aperture 4 and 7 only use faces 0-11
-    if (face < 0 || face > 11) {
-      throw std::runtime_error("hex_index: invalid face number (must be 0-11)");
-    }
+  const SolidTopology& t = topo();
+  const int max_face = (aperture == 3 && resolution > 0) ? t.n_faces - 1 : t.n_quads() - 1;
+  if (face < 0 || face > max_face) {
+    throw std::runtime_error("hex_index: invalid face number (must be 0-" +
+                             std::to_string(max_face) + ")");
   }
   
   if (resolution < 0) {
     throw std::runtime_error("hex_index: invalid resolution");
   }
-  
-  if (aperture == 7 && resolution > MAX_RES_AP7) {
-    throw std::runtime_error("hex_index: resolution exceeds max for aperture 7");
-  }
-  if (aperture == 3 && resolution > MAX_RES_AP3) {
-    throw std::runtime_error("hex_index: resolution exceeds max for aperture 3");
-  }
-  if (aperture == 4 && resolution > MAX_RES_AP4) {
-    throw std::runtime_error("hex_index: resolution exceeds max for aperture 4");
+  if (resolution > kMaxResolution) {
+    throw std::runtime_error("hex_index: resolution exceeds the maximum resolution");
   }
 
   if (index_type == IndexType::AUTO) {
@@ -115,7 +135,14 @@ std::string cell_to_index(int face, long long i, long long j,
     throw std::runtime_error("hex_index: invalid index_type for aperture");
   }
   
-  std::string result = format_quad(face);
+  // A cell a quad holds on the far edge of its fold axis is written from the
+  // near edge, under the quad's number plus the number of quads.
+  int lead = face;
+  if (index_type != IndexType::Z7 && resolution > 0 &&
+      quad_ij_from_far_edge(face, i, j, aperture, resolution)) {
+    lead = face + t.n_quads();
+  }
+  std::string result = format_quad(lead);
   
   if (resolution == 0) {
     return result;
@@ -134,10 +161,10 @@ std::string cell_to_index(int face, long long i, long long j,
   } else if (index_type == IndexType::Z7) {
     // Z7 encode includes the base cell in its output. Expand the stored
     // surrogate to its Class I substrate IJK (exact, identity for even res),
-    // then encode bijectively (quad fixed).
+    // then encode.
     long long sub_i, sub_j;
     ap7_surrogate_to_substrate_ijk(i, j, resolution, sub_i, sub_j);
-    return z7::encode_bijective(face, sub_i, sub_j, resolution);
+    return z7::encode(face, sub_i, sub_j, resolution);
   }
   
   return result;
@@ -146,6 +173,11 @@ std::string cell_to_index(int face, long long i, long long j,
 void index_to_cell(const std::string& index, int aperture,
                    IndexType index_type,
                    int& face, long long& i, long long& j, int& resolution) {
+  if (aperture == 9) {
+    check_hex9_type(index_type);
+    hex9_label_cell(index, face, i, j, resolution);
+    return;
+  }
   if (index.length() < 2) {
     throw std::runtime_error("hex_index: invalid index string");
   }
@@ -164,6 +196,11 @@ void index_to_cell(const std::string& index, int aperture,
     resolution = 0;
     i = 0;
     j = 0;
+    // A Z7 index's leading field is not always a bare quad, so its decoder
+    // reads it.
+    if (index_type == IndexType::Z7) {
+      z7::decode(index, face, i, j);
+    }
     return;
   }
   
@@ -183,13 +220,21 @@ void index_to_cell(const std::string& index, int aperture,
   } else if (index_type == IndexType::Z3) {
     resolution = index_str.length();
     z3::decode(index_str, resolution, i, j);
-  } else if (index_type == IndexType::Z7) {
+  }
+  if (index_type != IndexType::Z7) {
+    const SolidTopology& t = topo();
+    const int marked = face - t.n_quads();
+    if (marked >= 0 && marked < t.n_quads() && t.fold_axis[marked] >= 0) {
+      face = marked;
+      quad_ij_to_far_edge(face, i, j, aperture, resolution);
+    }
+  } else {
     // Z7 decode expects the full index (including base cell)
     // Calculate resolution from index length first
     resolution = index.length() - 2;
     int quadNum = face;
     long long sub_i, sub_j;
-    z7::decode_bijective(index, resolution, quadNum, sub_i, sub_j);
+    z7::decode(index, quadNum, sub_i, sub_j);
     // Coarsen the Class I substrate IJK back to the resolution-r surrogate
     // (identity for even res) that hexify stores.
     ap7_substrate_to_surrogate_ijk(sub_i, sub_j, resolution, i, j);
@@ -197,78 +242,15 @@ void index_to_cell(const std::string& index, int aperture,
   }
 }
 
-uint64_t index_to_uint64(const std::string& index, int aperture,
-                         IndexType index_type) {
-  // Pack index string into a 64-bit integer:
-  // Bits 60-63: face/quad (4 bits, 0-11)
-  // Bits 57-59: aperture-7 Z7 hierarchy seed (3 bits), 0 for every other index
-  // Remaining bits: resolution digits packed per aperture
-  if (index.length() < 2) {
-    throw std::runtime_error("hex_index: index too short for uint64 conversion");
-  }
-
-  int lead = parse_quad(index);
-  uint64_t result = (static_cast<uint64_t>(lead % 12) << 60) |
-                    (static_cast<uint64_t>(lead / 12) << 57);
-
-  if (index.length() == 2) return result;
-
-  std::string digits = index.substr(2);
-  int bits_per_digit;
-  if (aperture == 3) bits_per_digit = 2;       // 0-2 needs 2 bits
-  else if (aperture == 4) bits_per_digit = 2;   // 0-3 needs 2 bits
-  else if (aperture == 7) bits_per_digit = 3;   // 0-6 needs 3 bits
-  else throw std::runtime_error("hex_index: unsupported aperture for uint64");
-
-  // Aperture 7 spends three bits on the hierarchy seed; the others start at 60.
-  const int digit_base = (aperture == 7) ? 57 : 60;
-
-  if (static_cast<int>(digits.length()) * bits_per_digit > digit_base) {
-    throw std::runtime_error("hex_index: index too long for uint64 (overflow)");
-  }
-
-  for (size_t r = 0; r < digits.length(); r++) {
-    int digit = digits[r] - '0';
-    int shift = digit_base - static_cast<int>((r + 1) * bits_per_digit);
-    result |= (static_cast<uint64_t>(digit) << shift);
-  }
-
-  return result;
-}
-
-std::string uint64_to_index(uint64_t value, int resolution, int aperture,
-                            IndexType index_type) {
-  // Unpack uint64 back to index string
-  int face = static_cast<int>((value >> 60) & 0xF);
-  int seed = static_cast<int>((value >> 57) & 0x7);
-  std::string result = format_quad(face + 12 * seed);
-
-  if (resolution == 0) return result;
-
-  int bits_per_digit;
-  int max_digit;
-  if (aperture == 3) { bits_per_digit = 2; max_digit = 2; }
-  else if (aperture == 4) { bits_per_digit = 2; max_digit = 3; }
-  else if (aperture == 7) { bits_per_digit = 3; max_digit = 6; }
-  else throw std::runtime_error("hex_index: unsupported aperture for uint64");
-
-  const int digit_base = (aperture == 7) ? 57 : 60;
-  uint64_t mask = (1ULL << bits_per_digit) - 1;
-
-  for (int r = 0; r < resolution; r++) {
-    int shift = digit_base - (r + 1) * bits_per_digit;
-    int digit = static_cast<int>((value >> shift) & mask);
-    if (digit > max_digit) {
-      throw std::runtime_error("hex_index: uint64 value has an out-of-range digit for this aperture");
-    }
-    result += static_cast<char>('0' + digit);
-  }
-
-  return result;
-}
-
 std::string get_parent_index(const std::string& index, int aperture,
                              IndexType index_type) {
+  if (aperture == 9) {
+    check_hex9_type(index_type);
+    int level;
+    const hex9::OctPoint c = hex9_label_centre(index, level);
+    if (level == 0) throw std::runtime_error("hex_index: cannot get parent of resolution 0");
+    return hex9::label(hex9::ancestor(c, level, level - 1), level - 1);
+  }
   if (index.length() <= 2) {
     throw std::runtime_error("hex_index: cannot get parent of resolution 0");
   }
@@ -292,11 +274,22 @@ std::vector<std::string> get_children_indices(const std::string& index,
     index_type = get_default_index_type(aperture);
   }
 
+  std::vector<std::string> children;
+
+  if (aperture == 9) {
+    check_hex9_type(index_type);
+    int level;
+    const hex9::OctPoint c = hex9_label_centre(index, level);
+    if (level >= hex9::kMaxLevel) return children;
+    hex9::OctPoint kids[9];
+    hex9::children(c, level, kids);
+    for (const hex9::OctPoint& k : kids) children.push_back(hex9::label(k, level + 1));
+    return children;
+  }
+
   if (aperture != 3 && aperture != 4 && aperture != 7) {
     throw std::runtime_error("hex_index: invalid aperture");
   }
-
-  std::vector<std::string> children;
 
   int face, parent_res;
   long long parent_i, parent_j;
@@ -309,10 +302,7 @@ std::vector<std::string> get_children_indices(const std::string& index,
   // children), so this is checked explicitly up front rather than relying
   // on a catch-all around cell_to_index() below to swallow the resulting
   // "resolution exceeds max" error -- which would also hide unrelated bugs.
-  int max_res_for_aperture = (aperture == 7) ? MAX_RES_AP7 :
-                             (aperture == 3) ? MAX_RES_AP3 :
-                             (aperture == 4) ? MAX_RES_AP4 : -1;
-  if (max_res_for_aperture >= 0 && child_res > max_res_for_aperture) {
+  if (child_res > kMaxResolution) {
     return children;
   }
 
@@ -320,9 +310,13 @@ std::vector<std::string> get_children_indices(const std::string& index,
   // digit naming which child was taken, so the children are the parent index
   // with each digit appended -- the exact strings get_parent_index() strips
   // back to this one, which is what makes the two operations inverse.
+  // A Z7 string whose first nonzero digit is the direction a pentagon lacks
+  // names no cell, so a pentagon's descendants are the six that read back.
   if (!(index_type == IndexType::ZORDER && aperture == 7)) {
     for (int digit = 0; digit < aperture; digit++) {
-      children.push_back(index + std::to_string(digit));
+      std::string child = index + std::to_string(digit);
+      if (index_type == IndexType::Z7 && z7::in_deleted_subsequence(child)) continue;
+      children.push_back(child);
     }
     return children;
   }
@@ -349,6 +343,7 @@ int compare_indices(const std::string& idx1, const std::string& idx2) {
 
 int get_index_resolution(const std::string& index, int aperture,
                          IndexType index_type) {
+  if (aperture == 9) return static_cast<int>(index.substr(0, index.find('.')).size()) - 1;
   if (index.length() <= 2) return 0;
 
   if (index_type == IndexType::AUTO) {

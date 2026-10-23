@@ -2,7 +2,7 @@
 % Please edit documentation in R/hexify_map.R
 \name{hexify_heatmap}
 \alias{hexify_heatmap}
-\title{Create a ggplot2 visualization of hexagonal grid cells}
+\title{Create a ggplot2 Visualization of Hexagonal Grid Cells}
 \usage{
 hexify_heatmap(
   data,
@@ -20,6 +20,8 @@ hexify_heatmap(
   basemap_lwd = 0.5,
   mask_outside = FALSE,
   aperture = 3L,
+  shape = c("hexagon", "gosper", "descendants"),
+  depth = 3L,
   xlim = NULL,
   ylim = NULL,
   title = NULL,
@@ -38,8 +40,9 @@ are drawn with a uniform fill color. If not specified but data has a
 
 \item{basemap}{Optional basemap. Can be:
 \itemize{
-\item \code{NULL}: No basemap (default)
-\item \code{"world"}: Use built-in \code{hexify_world} map (low resolution)
+\item \code{NULL} or \code{FALSE}: No basemap (default)
+\item \code{"world"} or \code{TRUE}: Use built-in \code{hexify_world} map
+(low resolution)
 \item \code{"world_hires"}: Use high-resolution map from rnaturalearth (requires package)
 \item An sf object: User-supplied vector map, from any format
 \code{sf::st_read()} reads, such as a shapefile, 'GeoJSON' or 'GeoPackage'
@@ -58,9 +61,13 @@ are drawn with a uniform fill color. If not specified but data has a
 \item{colors}{Color palette for the heatmap. Can be:
 \itemize{
 \item A character vector of colors (for manual scale)
-\item A single RColorBrewer palette name (e.g., "YlOrRd", "Greens")
+\item A single RColorBrewer palette name (e.g., "YlOrRd", "Greens"),
+interpolated over its own range when a binned scale asks for more
+levels than the palette holds
+\item A viridis palette name ("viridis", "magma", "turbo", ...)
 \item NULL to use viridis
-}}
+}
+A name in neither family is an error naming the families.}
 
 \item{breaks}{Numeric vector of break points for binning continuous values,
 or NULL for continuous scale. Use \code{Inf} and \code{-Inf} for open-ended bins.}
@@ -84,6 +91,16 @@ If NULL, labels are auto-generated.}
 portions that fall outside the basemap polygons.}
 
 \item{aperture}{Grid aperture (default 3), used if data is from hexify()}
+
+\item{shape}{\code{"hexagon"} (default) draws each cell's own boundary.
+\code{"gosper"} draws it as a Gosper island and \code{"descendants"} as
+the outline of its descendants; both need an ISEA grid, and
+\code{"descendants"} one of aperture 7. See Details.}
+
+\item{depth}{For \code{shape = "gosper"}, the number of times each edge is
+replaced, multiplying its segments by 3; for \code{"descendants"}, the
+number of resolutions down, multiplying the cells behind one outline
+by 7.}
 
 \item{xlim}{Optional x-axis limits (in target CRS units) as c(min, max)}
 

@@ -11,7 +11,7 @@
 #' where analysis is done in ISEA (exact equal-area) and reporting in H3
 #' (industry-standard).
 #'
-#' @param cell_id Cell IDs to translate. Numeric for ISEA, character for H3.
+#' @param cell_id Cell IDs to translate. integer64 for ISEA, character for H3.
 #'   When \code{grid} is a HexData object and \code{cell_id} is \code{NULL},
 #'   all cell IDs from the data are used.
 #' @param grid A HexGridInfo or HexData object. For \code{direction =
@@ -29,9 +29,10 @@
 #'
 #' @return A data frame with columns:
 #' \describe{
-#'   \item{isea_cell_id}{ISEA cell ID (numeric)}
+#'   \item{isea_cell_id}{ISEA cell ID (integer64)}
 #'   \item{h3_cell_id}{H3 cell ID (character)}
-#'   \item{isea_area_km2}{Area of the ISEA cell in km2}
+#'   \item{isea_area_km2}{Area of the ISEA cell in km2, as \code{\link{cell_area}}
+#'     returns it}
 #'   \item{h3_area_km2}{Geodesic area of the H3 cell in km2}
 #'   \item{area_ratio}{Ratio of ISEA area to H3 area}
 #' }
@@ -74,17 +75,9 @@ h3_crosswalk <- function(cell_id = NULL,
   # -------------------------------------------------------------------------
   # Extract grid and cell IDs
   # -------------------------------------------------------------------------
-  if (is_hex_data(grid)) {
-    if (is.null(cell_id)) {
-      cell_id <- grid@cell_id
-    }
-    g <- grid@grid
-  } else {
-    g <- extract_grid(grid)
-    if (is.null(cell_id)) {
-      stop("cell_id required when grid is not HexData")
-    }
-  }
+  resolved <- resolve_cells_grid(cell_id, grid)
+  cell_id <- resolved$cell_id
+  g <- resolved$grid
 
   # -------------------------------------------------------------------------
   # Validate direction vs grid type
@@ -104,7 +97,7 @@ h3_crosswalk <- function(cell_id = NULL,
     if (is_h3_grid(isea_g)) {
       stop("isea_grid must be an ISEA grid, not H3")
     }
-    if (grid_radius_km(isea_g) != grid_radius_km(g)) {
+    if (!same_body_grids(isea_g, g)) {
       stop(sprintf(
         "Both grids must cover the same body: 'grid' has radius %s km, 'isea_grid' %s km",
         format(grid_radius_km(g)), format(grid_radius_km(isea_g))
@@ -139,7 +132,7 @@ h3_crosswalk <- function(cell_id = NULL,
     h3_ids <- cpp_h3_latLngToCell(coords$lon_deg, coords$lat_deg, h3_resolution)
 
     # Compute areas
-    isea_areas <- rep(g@area_km2, length(unique_ids))
+    isea_areas <- unname(cell_area(unique_ids, g))
     h3_areas <- scale_area_to_body(cpp_h3_cellAreaKm2(h3_ids), grid_radius_km(g))
 
     data.frame(
@@ -177,7 +170,7 @@ h3_crosswalk <- function(cell_id = NULL,
     # Compute areas
     h3_areas <- scale_area_to_body(cpp_h3_cellAreaKm2(as.character(unique_ids)),
                                    grid_radius_km(g))
-    isea_areas <- rep(isea_g@area_km2, length(unique_ids))
+    isea_areas <- unname(cell_area(isea_ids, isea_g))
 
     data.frame(
       isea_cell_id = isea_ids,

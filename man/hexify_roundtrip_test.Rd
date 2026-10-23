@@ -2,7 +2,7 @@
 % Please edit documentation in R/hexify_conversions.R
 \name{hexify_roundtrip_test}
 \alias{hexify_roundtrip_test}
-\title{Round-trip accuracy test}
+\title{Round-Trip Accuracy Test}
 \usage{
 hexify_roundtrip_test(grid, lon, lat, units = "km")
 }
@@ -29,7 +29,6 @@ and reconstructed coordinates.
 }
 \seealso{
 Other coordinate conversion:
-\code{\link[=hexify_cell_id_to_quad_ij]{hexify_cell_id_to_quad_ij()}},
 \code{\link[=hexify_cell_to_icosa_tri]{hexify_cell_to_icosa_tri()}},
 \code{\link[=hexify_cell_to_lonlat]{hexify_cell_to_lonlat()}},
 \code{\link[=hexify_cell_to_plane]{hexify_cell_to_plane()}},
@@ -50,3 +49,4 @@ Other coordinate conversion:
 \code{\link[=hexify_quad_xy_to_icosa_tri]{hexify_quad_xy_to_icosa_tri()}}
 }
 \concept{coordinate conversion}
+\keyword{internal}

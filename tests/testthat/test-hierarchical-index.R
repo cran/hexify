@@ -146,7 +146,7 @@ test_that("get_children honours levels on pure ISEA grids", {
     cells <- lonlat_to_cell(lon = c(0, 120), lat = c(45, -20), grid = g)
 
     twice <- lapply(get_children(cells, g), function(kids) {
-      sort(unique(unlist(get_children(kids, mid), use.names = FALSE)))
+      sort(unique(cell_id_unlist(get_children(kids, mid))))
     })
     direct <- lapply(get_children(cells, g, levels = 2), sort)
 
@@ -179,5 +179,119 @@ test_that("a cell is among the children of its two-level ancestor", {
 
     kids <- get_children(ancestors, coarse, levels = 2)
     expect_true(all(mapply(function(cell, k) cell %in% k, cells, kids)))
+  }
+})
+
+# =============================================================================
+# Children at the twelve icosahedron vertices
+# =============================================================================
+
+test_that("get_children returns cells that exist in the child grid", {
+  for (aperture in c(3L, 4L, 7L)) {
+    for (resolution in 1:3) {
+      grid <- hex_grid(resolution = resolution, aperture = aperture)
+      n_parent <- 2 + 10 * aperture^resolution
+      n_child <- 2 + 10 * aperture^(resolution + 1)
+      label <- sprintf("aperture %d, resolution %d", aperture, resolution)
+
+      kids <- cell_id_unlist(get_children(seq_len(n_parent), grid))
+
+      expect_false(anyNA(kids), info = label)
+      expect_true(all(kids >= 1 & kids <= n_child), info = label)
+    }
+  }
+})
+
+test_that("get_children inverts get_parent, pentagons included", {
+  for (aperture in c(3L, 4L, 7L)) {
+    resolution <- 2L
+    grid <- hex_grid(resolution = resolution, aperture = aperture)
+    child_grid <- hex_grid(resolution = resolution + 1L, aperture = aperture)
+    n_parent <- 2 + 10 * aperture^resolution
+    n_child <- 2 + 10 * aperture^(resolution + 1)
+    label <- sprintf("aperture %d", aperture)
+
+    kids <- get_children(seq_len(n_parent), grid)
+
+    # Every child names its parent back
+    claimed <- cell_id_unlist(kids)
+    expect_equal(get_parent(claimed, child_grid),
+                 as_cell_id(rep(seq_len(n_parent), lengths(kids))), info = label)
+
+    # And between them the parents claim the whole child grid, once each
+    expect_equal(sort(claimed), as_cell_id(seq_len(n_child)), info = label)
+  }
+})
+
+test_that("a pentagon has one child fewer than the aperture allows", {
+  # Aperture 7 refines a hexagon into seven cells; the vertex deficit takes one
+  grid <- hex_grid(resolution = 2, aperture = 7)
+  n_parent <- 2 + 10 * 7^2
+  counts <- lengths(get_children(seq_len(n_parent), grid))
+  pentagons <- is_pentagon(seq_len(n_parent), grid)
+
+  expect_equal(sum(pentagons), 12L)
+  expect_true(all(counts[pentagons] == 6L))
+  expect_true(all(counts[!pentagons] == 7L))
+})
+
+test_that("the round trip in both directions holds at a pentagon", {
+  parent_grid <- hex_grid(resolution = 2, aperture = 3)
+  child_grid <- hex_grid(resolution = 3, aperture = 3)
+
+  kids <- get_children(92L, parent_grid)[[1]]
+  expect_true(all(kids <= 272))
+  expect_no_error(back <- get_parent(kids, child_grid))
+  expect_equal(unique(back), 92)
+})
+
+test_that("resolution 0 holds twelve cells and every aperture reaches them", {
+  for (aperture in c(3L, 4L, 7L)) {
+    label <- sprintf("aperture %d", aperture)
+    base <- hex_grid(resolution = 0, aperture = aperture)
+    first <- hex_grid(resolution = 1, aperture = aperture)
+    n_first <- 2 + 10 * aperture
+
+    parents <- get_parent(seq_len(n_first), first)
+    expect_true(all(parents >= 1 & parents <= 12), info = label)
+    expect_equal(length(unique(parents)), 12L, info = label)
+
+    children <- get_children(seq_len(12), base)
+    expect_equal(sort(cell_id_unlist(children)),
+                 as_cell_id(seq_len(n_first)), info = label)
+    expect_equal(get_parent(cell_id_unlist(children), first),
+                 as_cell_id(rep(seq_len(12), lengths(children))), info = label)
+  }
+})
+
+test_that("every aperture-7 base cell has six children", {
+  # All twelve resolution-0 cells sit on an icosahedron vertex, so each is a
+  # pentagon: 12 * 6 is resolution 1's 72 cells exactly
+  base <- hex_grid(resolution = 0, aperture = 7)
+  expect_equal(lengths(get_children(seq_len(12), base)), rep(6L, 12))
+
+  # and the six Z7 strings under each base cell name exactly those children
+  g1 <- hex_grid(resolution = 1, aperture = 7)
+  from_cells <- lapply(get_children(seq_len(12), base),
+                       function(k) sort(cell_to_index(k, g1)))
+  expect_identical(hexify_get_children(sprintf("%02d", 0:11), aperture = 7), from_cells)
+  expect_equal(hexify_index_to_cell("00", aperture = 7)$face, 0L)
+  expect_equal(hexify_index_to_cell("01", aperture = 7)$face, 1L)
+})
+
+test_that("compaction reaches resolution 0 at every aperture", {
+  for (aperture in c(3L, 4L, 7L)) {
+    for (resolution in 2:3) {
+      label <- sprintf("aperture %d resolution %d", aperture, resolution)
+      grid <- hex_grid(resolution = resolution, aperture = aperture)
+      n_cells <- 2 + 10 * aperture^resolution
+
+      all_cells <- cell_to_index(seq_len(n_cells), grid)
+      compacted <- hex_compact(all_cells, grid)
+
+      expect_equal(length(compacted), 12L, info = label)
+      expect_equal(sort(hex_uncompact(compacted, grid, resolution)),
+                   sort(all_cells), info = label)
+    }
   }
 })

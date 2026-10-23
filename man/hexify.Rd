@@ -2,7 +2,7 @@
 % Please edit documentation in R/hexify.R
 \name{hexify}
 \alias{hexify}
-\title{Assign hexagonal DGGS cell IDs to geographic points}
+\title{Assign Hexagonal DGGS Cell IDs to Geographic Points}
 \usage{
 hexify(
   data,
@@ -29,9 +29,11 @@ area_km2, resolution, aperture and radius_km parameters.}
 
 \item{area_km2}{Target cell area in km^2 (mutually exclusive with diagonal).}
 
-\item{diagonal}{Target cell diagonal (long diagonal) in km}
+\item{diagonal}{Target cell spacing in km: the short (flat-to-flat)
+diagonal, equal to the distance between neighbouring cell centres}
 
-\item{resolution}{Grid resolution (0-30). Alternative to area_km2.}
+\item{resolution}{Grid resolution (0-30 for aperture 3, 0-29 for aperture 4, 0-21 for aperture 7
+on the icosahedron). Alternative to area_km2.}
 
 \item{aperture}{Grid aperture: 3, 4, 7, a mixed family such as "4/3" or
 "4/7", or one aperture per resolution level, e.g. \code{c(4, 4, 7, 3)}
@@ -47,7 +49,8 @@ A HexData object containing:
 \itemize{
 \item \code{data}: The original input data (unchanged)
 \item \code{grid}: The HexGridInfo specification
-\item \code{cell_id}: Numeric vector of cell IDs for each row
+\item \code{cell_id}: Cell IDs for each row (integer64 for ISEA, character
+for H3)
 \item \code{cell_center}: Matrix of cell center coordinates (lon, lat)
 }
 
@@ -117,7 +120,7 @@ result_mixed <- hexify(df, lon = "lon", lat = "lat", area_km2 = 1000, aperture =
 \seealso{
 \code{\link{hex_grid}} for grid specification,
 \code{\link{HexData-class}} for return object details,
-\code{\link{as_sf}} for converting to sf
+\code{\link[=st_as_sf.HexData]{st_as_sf}} for converting to sf
 
 Other hexify main:
 \code{\link[=hexify_grid]{hexify_grid()}}

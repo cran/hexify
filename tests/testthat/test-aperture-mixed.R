@@ -343,7 +343,7 @@ test_that("aperture order does not change the grid", {
 # meant distinct real cells could collide onto the same cell ID once the
 # aperture-4 prefix meaningfully changed the coordinate scale. These tests
 # lock in the fix: (i,j) now come from the same 2^level * sqrt(3)^(res-level)
-# substrate that calc_grid_params_mixed()'s cell-count formula describes.
+# substrate that the mixed frame's cell-count formula describes.
 
 test_that("mixed aperture (i,j) does not collide across many sampled points", {
   skip_on_cran()  # Detailed loop test
@@ -356,9 +356,9 @@ test_that("mixed aperture (i,j) does not collide across many sampled points", {
   for (mixed_level in c(1, 2, 3)) {
     for (res in c(3, 4, 5, 6)) {
       if (mixed_level >= res) next
-      cells <- cpp_lonlat_to_cell_seq(lons, lats, seq43(res, mixed_level))
-      centers <- cpp_cell_to_lonlat_seq(cells, seq43(res, mixed_level))
-      cells2 <- cpp_lonlat_to_cell_seq(centers$lon_deg, centers$lat_deg, seq43(res, mixed_level))
+      cells <- cpp_lonlat_to_cell(numeric(0), lons, lats, res, 0L, seq43(res, mixed_level))
+      centers <- cpp_cell_to_lonlat(numeric(0), cells, res, 0L, seq43(res, mixed_level))
+      cells2 <- cpp_lonlat_to_cell(numeric(0), centers$lon_deg, centers$lat_deg, res, 0L, seq43(res, mixed_level))
 
       expect_equal(cells2, cells,
                    info = sprintf("mixed_level=%d res=%d: cell id round-trip", mixed_level, res))
@@ -380,8 +380,8 @@ test_that("mixed aperture (i,j) matches the mixed-radix grid dimension, not pure
 
   res <- 5
   mixed_level <- 2
-  cells <- cpp_lonlat_to_cell_seq(lons, lats, seq43(res, mixed_level))
-  qij <- cpp_cell_to_quad_ij_seq(cells, seq43(res, mixed_level))
+  cells <- cpp_lonlat_to_cell(numeric(0), lons, lats, res, 0L, seq43(res, mixed_level))
+  qij <- cpp_cell_to_quad_ij(numeric(0), cells, res, 0L, seq43(res, mixed_level))
 
   # True mixed-radix dim: 2^2 * sqrt(3)^3 (+ substrate boost if class II)
   ap3_count <- res - mixed_level
@@ -411,10 +411,10 @@ test_that("mixed aperture level = 0 (all aperture 3)", {
 
   for (res in c(3, 5, 7)) {
     # Mixed with level 0 = all ap3
-    cell_mixed <- cpp_lonlat_to_cell_seq(test_lon, test_lat, seq43(res, 0))
+    cell_mixed <- cpp_lonlat_to_cell(numeric(0), test_lon, test_lat, res, 0L, seq43(res, 0))
 
     # Pure aperture 3
-    cell_pure <- cpp_lonlat_to_cell(test_lon, test_lat, res, 3)
+    cell_pure <- cpp_lonlat_to_cell(numeric(0), test_lon, test_lat, res, 3, integer(0))
 
     expect_equal(cell_mixed, cell_pure,
                  info = sprintf("res=%d, mixed_level=0 should equal pure ap3", res))
@@ -432,7 +432,7 @@ test_that("mixed aperture level = resolution produces valid cells", {
 
   for (res in c(2, 4, 6)) {
     # Mixed with level = res = all ap4 subdivisions
-    cell_mixed <- cpp_lonlat_to_cell_seq(test_lon, test_lat, seq43(res, res))
+    cell_mixed <- cpp_lonlat_to_cell(numeric(0), test_lon, test_lat, res, 0L, seq43(res, res))
 
     # Verify cells are valid (positive integers)
     expect_true(all(cell_mixed >= 1),
@@ -441,8 +441,8 @@ test_that("mixed aperture level = resolution produces valid cells", {
                 info = sprintf("res=%d cells should be finite", res))
 
     # Verify round-trip works
-    centers <- cpp_cell_to_lonlat_seq(cell_mixed, seq43(res, res))
-    cell2 <- cpp_lonlat_to_cell_seq(centers$lon_deg, centers$lat_deg, seq43(res, res))
+    centers <- cpp_cell_to_lonlat(numeric(0), cell_mixed, res, 0L, seq43(res, res))
+    cell2 <- cpp_lonlat_to_cell(numeric(0), centers$lon_deg, centers$lat_deg, res, 0L, seq43(res, res))
     expect_equal(cell_mixed, cell2,
                  info = sprintf("res=%d, mixed_level=res round-trip", res))
   }
@@ -459,9 +459,9 @@ test_that("mixed aperture round-trip at boundary resolutions", {
   # Skip res=1 with mixed_level=1 as it's a degenerate case
   for (res in c(2, 5, 10)) {
     for (mixed_level in c(0, 1, min(res - 1, 5))) {
-      cell <- cpp_lonlat_to_cell_seq(test_lon, test_lat, seq43(res, mixed_level))
-      centers <- cpp_cell_to_lonlat_seq(cell, seq43(res, mixed_level))
-      cell2 <- cpp_lonlat_to_cell_seq(centers$lon_deg, centers$lat_deg, seq43(res, mixed_level))
+      cell <- cpp_lonlat_to_cell(numeric(0), test_lon, test_lat, res, 0L, seq43(res, mixed_level))
+      centers <- cpp_cell_to_lonlat(numeric(0), cell, res, 0L, seq43(res, mixed_level))
+      cell2 <- cpp_lonlat_to_cell(numeric(0), centers$lon_deg, centers$lat_deg, res, 0L, seq43(res, mixed_level))
 
       expect_equal(cell, cell2,
                    info = sprintf("res=%d, mixed_level=%d round-trip", res, mixed_level))
@@ -473,13 +473,18 @@ test_that("mixed aperture rejects an unsupported aperture", {
   setup_icosa()
 
   expect_error(
-    cpp_lonlat_to_cell_seq(0, 0, c(4, 4, 5)),
+    cpp_lonlat_to_cell(numeric(0), 0, 0, 2L, 0L, c(4, 4, 5)),
     "aperture must be 3, 4, or 7"
   )
 
   expect_error(
-    cpp_lonlat_to_cell_seq(0, 0, integer(0)),
-    "ap_seq must name at least the base grid"
+    cpp_lonlat_to_cell(numeric(0), 0, 0, 2L, 0L, integer(0)),
+    "aperture must be 3, 4, 7 or 9"
+  )
+
+  expect_error(
+    cpp_lonlat_to_cell(numeric(0), 0, 0, 3L, 0L, c(4, 4, 3)),
+    "takes aperture 0 and resolution"
   )
 })
 
@@ -585,9 +590,8 @@ test_that("mixed 4/3 get_parent(get_children()) recovers the parent", {
   }
 })
 
-test_that("mixed 4/3 cell_to_index round-trips to the original cell", {
+test_that("mixed 4/3 cell_to_index names each cell once", {
   setup_icosa()
-  decode <- hexify:::mixed_index_to_cell_one
   for (res in c(2, 4, 6, 7)) {
     grid <- hex_grid(resolution = res, aperture = "4/3")
     set.seed(100 + res)
@@ -597,9 +601,8 @@ test_that("mixed 4/3 cell_to_index round-trips to the original cell", {
     lat <- c(runif(80, -85, 85), runif(20, 80, 89.9) * sample(c(-1, 1), 20, TRUE))
     cells <- unique(lonlat_to_cell(lon, lat, grid))
     idx <- cell_to_index(cells, grid)
-    back <- vapply(idx, function(s) decode(s, res, "4/3"), numeric(1))
-    expect_equal(unname(back), cells,
-                 info = sprintf("res=%d: index round-trip", res))
+    expect_false(anyDuplicated(idx) > 0,
+                 info = sprintf("res=%d: distinct cells, distinct indices", res))
     # Parent's index is a prefix of the child's index.
     parents <- get_parent(cells, grid)
     pidx <- cell_to_index(parents, hex_grid(resolution = res - 1L, aperture = "4/3"))
@@ -638,11 +641,13 @@ test_that("mixed 4/3 get_children is exactly the geometric-parent inverse", {
     all_child <- seq_len(ncc)
     par_of_child <- get_parent(all_child, cgrid)
     parents <- sort(unique(par_of_child))
-    for (p in parents) {
-      truth <- sort(all_child[par_of_child == p])
+    for (k in seq_along(parents)) {
+      p <- parents[k]
+      truth <- as_cell_id(sort(all_child[par_of_child == p]))
       got <- get_children(p, grid)[[1]]
       expect_equal(got, truth,
-                   info = sprintf("res=%d parent=%.0f exact children", res, p))
+                   info = sprintf("res=%d parent=%s exact children", res,
+                                  as.character(p)))
     }
   }
 })
@@ -676,20 +681,59 @@ test_that("hex_grid accepts family spellings and per-level sequences", {
 
   g <- hex_grid(resolution = 4, aperture = "4/7")
   expect_equal(g@aperture, "4/7")
-  expect_equal(hexify:::grid_ap_seq(g), c(4L, 4L, 4L, 7L, 7L))
+  expect_equal(hexify:::isea_levels(g@aperture, g@resolution)$ap_seq,
+               c(4L, 4L, 4L, 7L, 7L))
 
   g2 <- hex_grid(resolution = 4, aperture = c(4, 7, 3, 7))
-  expect_equal(g2@aperture, "4/7/3/7")
-  expect_equal(hexify:::grid_ap_seq(g2), c(4L, 4L, 7L, 3L, 7L))
+  expect_equal(g2@aperture, "4,7,3,7")
+  expect_equal(hexify:::isea_levels(g2@aperture, g2@resolution)$ap_seq,
+               c(4L, 4L, 7L, 3L, 7L))
 
   # Cell count is the product over the sequence, plus the two poles
   expect_equal(hexify:::aperture_n_cells("4/7", 4), 10 * 4 * 4 * 7 * 7 + 2)
-  expect_equal(hexify:::aperture_n_cells("4/7/3/7", 4), 10 * 4 * 7 * 3 * 7 + 2)
+  expect_equal(hexify:::aperture_n_cells("4,7,3,7", 4), 10 * 4 * 7 * 3 * 7 + 2)
 
   expect_error(hex_grid(resolution = 4, aperture = c(4, 5, 3, 7)),
                "must be one of")
-  expect_error(hex_grid(resolution = 4, aperture = c(4, 7, 3)),
+  expect_error(hex_grid(resolution = 2, aperture = c(4, 7, 3)),
                "one aperture per resolution level")
+})
+
+test_that("a list shorter than the resolution recurs, as OGC Topic 21 reads it", {
+  setup_icosa()
+
+  expect_equal(hex_grid(resolution = 5, aperture = c(4, 3))@aperture, "4,3,4,3,4")
+  expect_equal(hex_grid(resolution = 4, aperture = c(4, 7, 3))@aperture, "4,7,3,4")
+  expect_equal(hex_grid(resolution = 5, aperture = "4,3")@aperture, "4,3,4,3,4")
+
+  # The recurring list and its spelled-out sequence are one grid
+  pts <- sphere_test_points(500)
+  expect_equal(lonlat_to_cell(pts$lon, pts$lat, hex_grid(resolution = 5, aperture = c(4, 3))),
+               lonlat_to_cell(pts$lon, pts$lat,
+                              hex_grid(resolution = 5, aperture = c(4, 3, 4, 3, 4))))
+})
+
+test_that("a two-level sequence is not the family of the same name", {
+  setup_icosa()
+
+  per_level <- hex_grid(resolution = 2, aperture = c(4, 7))
+  family <- hex_grid(resolution = 2, aperture = "4/7")
+  expect_equal(per_level@aperture, "4,7")
+  expect_equal(hex_grid(resolution = 2, aperture = "4,7")@aperture, "4,7")
+
+  # The same grid at resolution 2 ...
+  expect_equal(hexify:::isea_levels(per_level@aperture, 2)$ap_seq,
+               hexify:::isea_levels(family@aperture, 2)$ap_seq)
+
+  # ... whose parents sit on different grids: the per-level sequence's first
+  # level, aperture 4, and the family's resolution 1, aperture 7.
+  ids <- seq_len(hexify:::grid_n_cells(per_level))
+  expect_equal(max(get_parent(ids, per_level)), hexify:::aperture_n_cells("4", 1))
+  expect_equal(max(get_parent(ids, family)), hexify:::aperture_n_cells("7", 1))
+
+  # A per-level sequence names no finer level, and a family names two apertures
+  expect_error(get_children(1, per_level), "apertures of 2 levels, resolution 3")
+  expect_error(hex_grid(resolution = 4, aperture = "4/4/7/3"), "4,4,7,3")
 })
 
 test_that("mixed sequence cell IDs are a bijection with (quad, i, j)", {
@@ -699,18 +743,19 @@ test_that("mixed sequence cell IDs are a bijection with (quad, i, j)", {
   for (ap in c("4/3", "4/7", "7/4", "3/7", "7/3")) {
     for (res in 1:3) {
       g <- hex_grid(resolution = res, aperture = ap)
-      ap_seq <- hexify:::grid_ap_seq(g)
+      lv <- hexify:::isea_levels(g@aperture, g@resolution)
       ids <- seq_len(hexify:::aperture_n_cells(ap, res))
 
-      qij <- cpp_cell_to_quad_ij_seq(as.numeric(ids), ap_seq)
-      back <- cpp_quad_ij_to_cell_seq(qij$quad, qij$i, qij$j, ap_seq)
+      qij <- cpp_cell_to_quad_ij(numeric(0), as_cell_id(ids), lv$resolution, lv$aperture, lv$ap_seq)
+      back <- cpp_quad_ij_to_cell(numeric(0), qij$quad, qij$i, qij$j, lv$resolution,
+                                  lv$aperture, lv$ap_seq)
 
-      expect_equal(back, as.numeric(ids),
+      expect_equal(back, as_cell_id(ids),
                    info = sprintf("%s res %d: cell ID round-trip", ap, res))
       expect_equal(length(unique(paste(qij$quad, qij$i, qij$j))), length(ids),
                    info = sprintf("%s res %d: distinct (quad, i, j) per cell", ap, res))
 
-      dim <- cpp_ap_seq_edge_dim(ap_seq)
+      dim <- cpp_quad_edge_dim(lv$resolution, lv$aperture, lv$ap_seq)
       expect_true(all(qij$i >= 0 & qij$i < dim & qij$j >= 0 & qij$j < dim),
                   info = sprintf("%s res %d: (i, j) within the quad", ap, res))
     }
@@ -751,6 +796,144 @@ test_that("mixed sequence points land in a cell centred near them", {
       expect_lt(median(d), spacing_km)
     }
   }
+})
+
+test_that("mixed sequence cell boundaries enclose the points assigned to them", {
+  skip_on_cran()  # Enumerates every cell of the grid
+  setup_icosa()
+
+  to_xyz <- function(lon, lat) {
+    r <- pi / 180
+    cbind(cos(lat * r) * cos(lon * r), cos(lat * r) * sin(lon * r), sin(lat * r))
+  }
+
+  # An odd number of aperture-7 steps rotates the lattice off the quad edges,
+  # so the cells along every edge straddle it.
+  for (aperture in list(c(4, 7), c(7, 3), c(4, 4, 7, 3), c(4, 3, 7))) {
+    res <- length(aperture)
+    g <- hex_grid(resolution = res, aperture = aperture)
+    ids <- seq_len(hexify:::grid_n_cells(g))
+    label <- paste(aperture, collapse = ",")
+
+    expect_equal(nrow(grid_global(g)), length(ids),
+                 info = sprintf("c(%s): grid_global returns every cell", label))
+
+    ctr <- cell_to_lonlat(ids, g)
+    lv <- hexify:::isea_levels(g@aperture, g@resolution)
+    corners <- cpp_cell_to_corners(numeric(0), as_cell_id(ids), lv$resolution,
+                                   lv$aperture, lv$ap_seq, 1e-3)
+    owner <- rep(ids, vapply(corners, nrow, 1L))
+    vert <- do.call(rbind, corners)
+    v <- to_xyz(vert[, 1], vert[, 2])
+    p <- v + 0.005 * (to_xyz(ctr$lon_deg, ctr$lat_deg)[owner, , drop = FALSE] - v)
+    p <- p / sqrt(rowSums(p^2))
+    lon <- atan2(p[, 2], p[, 1]) * 180 / pi
+    lat <- asin(pmin(1, pmax(-1, p[, 3]))) * 180 / pi
+
+    # A point just inside a drawn boundary is assigned to that cell
+    expect_equal(lonlat_to_cell(lon, lat, g), owner,
+                 info = sprintf("c(%s): boundary points fall in their own cell", label))
+  }
+})
+
+# =============================================================================
+# PARENT ASSIGNMENT ON THE LATTICE (issue #85)
+# =============================================================================
+#
+# An aperture-3 step puts child centres on parent corners (three parents tie)
+# and an aperture-4 step on parent edge midpoints (two tie). The parent is the
+# nearest parent-lattice point in exact integer coordinates, with a fixed tie
+# rule, so it does not depend on floating-point rounding.
+
+mixed_pentagon <- function(ids, res, ap) {
+  lv <- hexify:::isea_levels(ap, res)
+  nb <- cpp_get_neighbors_isea(numeric(0), as_cell_id(ids), lv$resolution,
+                               lv$aperture, lv$ap_seq)
+  vapply(nb, length, 1L) == 5L
+}
+
+test_that("every hexagonal parent of an aligned grid gets aperture-many children", {
+  skip_on_cran()  # Enumerates every cell of the grid
+  setup_icosa()
+
+  # A parent grid whose lattice runs along the quad edges has no cells
+  # straddling an edge, so every hexagonal parent receives exactly the
+  # aperture's count.
+  cases <- list(list("3,3,3", 3L, 3L), list("4,4,4", 3L, 4L), list("7,7", 2L, 7L),
+                list("3,3,3,3,3", 5L, 3L), list("4,4,4,4,4", 5L, 4L),
+                list("4/3", 5L, 3L))
+  for (cs in cases) {
+    ap <- cs[[1]]
+    res <- cs[[2]]
+    ap_p <- hexify:::aperture_at_resolution(ap, res - 1L)
+    n_c <- hexify:::aperture_n_cells(ap, res)
+    n_p <- hexify:::aperture_n_cells(ap_p, res - 1L)
+    cnt <- tabulate(hexify:::mixed_get_parent(seq_len(n_c), res, ap), n_p)
+    hex <- !mixed_pentagon(seq_len(n_p), res - 1L, ap_p)
+
+    expect_true(all(cnt[hex] == cs[[3]]), info = sprintf("%s res %d", ap, res))
+    expect_true(all(cnt >= 1), info = sprintf("%s res %d: no childless parent", ap, res))
+  }
+})
+
+test_that("mixed parents agree with centre containment and break ties among the tied", {
+  skip_on_cran()  # Enumerates every cell of the grid
+  setup_icosa()
+
+  for (cs in list(list("4,3,4,3", 4L), list("3,4,7,3", 4L), list("4/3", 4L),
+                  list("7/4", 3L), list("4/7", 2L))) {
+    ap <- cs[[1]]
+    res <- cs[[2]]
+    ids <- seq_len(hexify:::aperture_n_cells(ap, res))
+    par <- as.character(hexify:::mixed_get_parent(ids, res, ap))
+    ll <- hexify:::mixed_cell_center(ids, res, ap)
+
+    # The parents the centre falls in when moved a hair in eight directions
+    e <- 1e-6 * sqrt(41253 / length(ids))
+    near <- sapply(0:7, function(k) {
+      lat <- pmax(-89.999999, pmin(89.999999, ll$lat_deg + e * sinpi(k / 4)))
+      as.character(hexify:::mixed_point_to_cell(ll$lon_deg + e * cospi(k / 4) / cospi(lat / 180),
+                                                lat, res - 1L, ap))
+    })
+    tied <- apply(near, 1, function(x) length(unique(x)) > 1)
+
+    expect_true(all(par[!tied] == near[!tied, 1]),
+                info = sprintf("%s res %d: off ties, the parent contains the centre", ap, res))
+    expect_true(all(par == near[cbind(seq_along(ids), max.col(near == par))]),
+                info = sprintf("%s res %d: a tie goes to one of the tied parents", ap, res))
+  }
+})
+
+test_that("mixed get_children is exactly the inverse of get_parent", {
+  skip_on_cran()  # Brute-force ground truth over every parent
+  setup_icosa()
+
+  # A child grid above 2000 cells ("4/3" at resolution 5) takes the neighbour
+  # walk rather than the exhaustive filter.
+  for (cs in list(list("4/3", 4L), list("7/4", 2L), list("4/7", 2L))) {
+    grid <- hex_grid(resolution = cs[[2]], aperture = cs[[1]])
+    cgrid <- hex_grid(resolution = cs[[2]] + 1L, aperture = cs[[1]])
+    par <- get_parent(seq_len(hexify:::grid_n_cells(cgrid)), cgrid)
+    parents <- seq_len(hexify:::grid_n_cells(grid))
+    kids <- get_children(parents, grid)
+    truth <- split(seq_along(par), factor(par, levels = parents))
+
+    expect_equal(lapply(kids, as.integer), unname(lapply(truth, as.integer)),
+                 info = sprintf("%s res %d: children of every parent", cs[[1]], cs[[2]]))
+  }
+})
+
+test_that("a two-step sequence and its reverse are the same grid", {
+  setup_icosa()
+
+  # Scale and orientation do not depend on the order of the steps
+  a <- hex_grid(resolution = 2, aperture = c(3, 4))
+  b <- hex_grid(resolution = 2, aperture = c(4, 3))
+  ids <- seq_len(hexify:::grid_n_cells(a))
+
+  expect_equal(hexify:::grid_n_cells(b), length(ids))
+  expect_equal(cell_to_lonlat(ids, b), cell_to_lonlat(ids, a))
+  expect_equal(cell_area(ids, b), cell_area(ids, a))
 })
 
 test_that("mixed sequence hierarchy navigates for aperture-7 spellings", {

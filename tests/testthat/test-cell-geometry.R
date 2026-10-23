@@ -1,6 +1,5 @@
 # tests/testthat/test-cell-geometry.R
-# Geometry of a cell boundary: orientation, pentagons, and the two shapes the
-# same boundary is returned in.
+# Geometry of a cell boundary: orientation and pentagons.
 
 gc_distance <- function(a, b) {
   r <- pi / 180
@@ -14,23 +13,6 @@ lonlat_matrix <- function(df) {
   as.matrix(df[, c("lon_deg", "lat_deg")])
 }
 
-test_that("the corner list and the polygon table are the same boundary", {
-  for (ap in c(3, 4, 7)) {
-    cells <- as.numeric(c(1, 5, 40, 10 * ap^3 + 2))
-
-    rings <- cpp_cell_to_corners(cells, 3L, ap)
-    table <- cpp_cell_to_polygon(cells, 3L, ap)
-
-    for (k in seq_along(cells)) {
-      rows <- table[table$hex_id == cells[k], ]
-      expect_equal(nrow(rows), nrow(rings[[k]]))
-      expect_equal(rows$lon, unname(rings[[k]][, "lon"]))
-      expect_equal(rows$lat, unname(rings[[k]][, "lat"]))
-      expect_equal(rows$order, seq_len(nrow(rows)))
-    }
-  }
-})
-
 test_that("corners fall between the neighbouring cell centres", {
   # A corner is one circumradius from its own centre and the same from the two
   # neighbours sharing it. Turning the lattice by 30 degrees would aim the
@@ -43,8 +25,8 @@ test_that("corners fall between the neighbouring cell centres", {
       cells <- cells[!is_pentagon(cells, g)]
 
       centres <- lonlat_matrix(cell_to_lonlat(cells, g))
-      rings <- cpp_cell_to_corners(as.numeric(cells), as.integer(res),
-                                   as.integer(ap))
+      rings <- cpp_cell_to_corners(numeric(0), as_cell_id(cells), as.integer(res),
+                                   as.integer(ap), integer(0))
 
       ratios <- numeric(0)
       for (k in seq_along(cells)) {
@@ -79,8 +61,8 @@ test_that("a cell at an icosahedral vertex is a pentagon", {
       pentagons <- seq_len(n)[is_pentagon(seq_len(n), g)]
       expect_length(pentagons, 12)
 
-      rings <- cpp_cell_to_corners(as.numeric(pentagons), as.integer(res),
-                                   as.integer(ap))
+      rings <- cpp_cell_to_corners(numeric(0), as_cell_id(pentagons), as.integer(res),
+                                   as.integer(ap), integer(0))
       for (ring in rings) {
         expect_equal(nrow(ring), 6L)
         expect_equal(ring[1, ], ring[6, ])
@@ -100,8 +82,8 @@ test_that("every pentagon corner is shared with a neighbour", {
       pentagons <- seq_len(n)[is_pentagon(seq_len(n), g)]
 
       centres <- lonlat_matrix(cell_to_lonlat(pentagons, g))
-      rings <- cpp_cell_to_corners(as.numeric(pentagons), as.integer(res),
-                                   as.integer(ap))
+      rings <- cpp_cell_to_corners(numeric(0), as_cell_id(pentagons), as.integer(res),
+                                   as.integer(ap), integer(0))
 
       for (k in seq_along(pentagons)) {
         neighbours <- get_neighbors(pentagons[k], g)[[1]]
@@ -160,4 +142,62 @@ test_that("a mixed sequence and its first aperture give different polygons", {
   pure_xy <- sf::st_coordinates(cell_to_sf(cells, pure, wrap_dateline = FALSE))
 
   expect_false(isTRUE(all.equal(mixed_xy, pure_xy)))
+})
+
+test_that("a point goes to the cell with the nearest centre", {
+  # Within one face the plane is the face's own, and a cell is the set of points
+  # nearer its centre than any neighbour's. Odd aperture-7 resolutions sit on a
+  # rotated lattice, where a substrate-then-coarsen assignment breaks this.
+  set.seed(7)
+  lon <- runif(500, 8, 16)
+  lat <- runif(500, 42, 48)
+  plane <- cpp_lonlat_to_plane(numeric(0), lon, lat)
+
+  for (case in list(c(3, 5), c(4, 6), c(7, 3), c(7, 4), c(7, 5))) {
+    g <- hex_grid(resolution = case[2], aperture = case[1])
+    cells <- lonlat_to_cell(lon, lat, g)
+    neighbours <- get_neighbors(cells, g)
+
+    nearest <- vapply(seq_along(cells), function(k) {
+      cand <- c(cells[k], neighbours[[k]])
+      ctr <- cpp_cell_to_plane(numeric(0), cand, case[2], case[1])
+      d <- (ctr$plane_x - plane$plane_x[k])^2 + (ctr$plane_y - plane$plane_y[k])^2
+      which.min(d) == 1L
+    }, logical(1))
+    expect_true(all(nearest), info = sprintf("aperture %d, resolution %d", case[1], case[2]))
+  }
+})
+
+test_that("a drawn cell is the cell lonlat_to_cell assigns", {
+  skip_on_cran()
+  # Trace each ring tightly, step every point a hair towards the centre on the
+  # sphere, and read it back: it must land in the same cell. The sample holds
+  # the 12 vertex cells and cells straddling quad edges.
+  xyz <- function(lon, lat) {
+    r <- pi / 180
+    cbind(cos(lat * r) * cos(lon * r), cos(lat * r) * sin(lon * r), sin(lat * r))
+  }
+
+  for (case in list(list(3, 3), list(3, 4), list(4, 3), list(7, 2), list(7, 3),
+                    list("4/7", 4))) {
+    g <- hex_grid(resolution = case[[2]], aperture = case[[1]])
+    total <- aperture_n_cells(g@aperture, g@resolution)
+    cells <- unique(c(seq_len(total)[is_pentagon(seq_len(total), g)],
+                      round(seq(2, total - 1, length.out = 40))))
+    # The ring strays from the wall by at most 1e-5 of a piece's arc, a tenth
+    # of the step towards the centre
+    rings <- isea_cell_rings(cells, g@resolution, g@aperture, icosa_arg(g), 1e-5)
+    centres <- cell_to_lonlat(cells, g)
+    rings <- lapply(rings, function(r) r[-nrow(r), , drop = FALSE])
+    owner <- rep(seq_along(cells), vapply(rings, nrow, integer(1)))
+    ring <- do.call(rbind, rings)
+    p <- xyz(ring[, 1], ring[, 2]) * (1 - 1e-4) +
+      xyz(centres$lon_deg, centres$lat_deg)[owner, ] * 1e-4
+    p <- p / sqrt(rowSums(p^2))
+    back <- lonlat_to_cell(atan2(p[, 2], p[, 1]) * 180 / pi, asin(p[, 3]) * 180 / pi, g)
+    stray <- unique(cells[owner[back != cells[owner]]])
+    expect_true(length(stray) == 0,
+                info = sprintf("aperture %s, resolution %d, cells %s", case[[1]], case[[2]],
+                               paste(stray, collapse = ", ")))
+  }
 })

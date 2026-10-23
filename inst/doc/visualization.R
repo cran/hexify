@@ -4,6 +4,14 @@ library(hexify)
 library(sf)
 library(ggplot2)
 
+## ----eval = FALSE-------------------------------------------------------------
+# # Install from CRAN
+# install.packages("hexify")
+# 
+# # Or install development version from GitHub
+# # install.packages("pak")
+# pak::pak("gcol33/hexify")
+
 ## ----sample-data--------------------------------------------------------------
 cities <- data.frame(
   name = c("Vienna", "Paris", "Madrid", "Berlin", "Rome",
@@ -96,14 +104,12 @@ hexify_heatmap(result, basemap = "world") +
   )
 
 ## ----ggplot-layers, fig.width=7, fig.height=5---------------------------------
-# Get the city coordinates
-city_points <- st_as_sf(cities, coords = c("lon", "lat"), crs = 4326)
-
-hexify_heatmap(result, basemap = "world", title = "Cities with Labels") +
-  geom_sf(data = city_points, color = "red", size = 2) +
-  geom_sf_text(data = city_points, aes(label = name),
-               nudge_y = 0.8, size = 5, color = "darkgray") +
-  coord_sf(xlim = c(-5, 25), ylim = c(45, 55))
+# The map is in longitude/latitude, so the cities go on as plain points
+hexify_heatmap(result, basemap = "world", title = "Cities with Labels",
+               xlim = c(-5, 25), ylim = c(45, 55)) +
+  geom_point(data = cities, aes(x = lon, y = lat), color = "red", size = 2) +
+  geom_label(data = cities, aes(x = lon, y = lat, label = name),
+             nudge_y = 0.8, size = 5)
 
 ## ----heatmap-setup------------------------------------------------------------
 # Simulate observation data with counts
@@ -210,10 +216,31 @@ ggplot() +
   theme_minimal(base_size = FIG_BASE_SIZE) +
   theme(axis.text = element_blank(), axis.ticks = element_blank())
 
+## ----cell-shapes, fig.width=7, fig.height=2.6---------------------------------
+grid <- hex_grid(resolution = 2, aperture = 7)
+cells <- grid_rect(c(-15, 30, 40, 65), grid)$cell_id
+ortho <- "+proj=ortho +lon_0=12 +lat_0=48"
+set.seed(1)
+colour <- factor(sample(8, length(cells), replace = TRUE))
+
+shapes <- do.call(rbind, lapply(c("hexagon", "gosper", "descendants"), function(s) {
+  polys <- cell_to_sf(cells, grid, shape = s, depth = 4)
+  polys$colour <- colour[match(polys$cell_id, cells)]
+  polys$shape <- factor(s, levels = c("hexagon", "gosper", "descendants"))
+  polys
+}))
+
+ggplot(sf::st_transform(shapes, ortho)) +
+  geom_sf(aes(fill = colour), color = "gray25", linewidth = 0.15,
+          show.legend = FALSE) +
+  facet_wrap(~shape) +
+  scale_fill_brewer(palette = "Set3") +
+  theme_void(base_size = FIG_BASE_SIZE)
+
 ## ----random-sample, fig.width=7, fig.height=3.5-------------------------------
 # Grid parameters (coarse for faster build)
 grid <- hex_grid(area_km2 = 200000, aperture = 3)
-max_cell <- 10 * (3^grid@resolution) + 2
+max_cell <- n_cells(grid)
 
 # Sample random cell IDs
 set.seed(123)
@@ -228,7 +255,7 @@ ggplot() +
   geom_sf(data = sample_polys, fill = alpha("forestgreen", 0.5),
           color = "darkgreen", linewidth = 0.4) +
   labs(title = sprintf("Random Sample of %d Cells", N),
-       subtitle = sprintf("~%.0f km2 each", grid@area_km2)) +
+       subtitle = sprintf("~%.0f km2 each", summary(grid)$area_km2)) +
   theme_minimal(base_size = FIG_BASE_SIZE) +
   theme(axis.text = element_blank(), axis.ticks = element_blank())
 
@@ -247,7 +274,6 @@ stations_hex <- hexify(stations, lon = "lon", lat = "lat", grid = grid)
 
 # Aggregate temperature by cell
 stations_df <- as.data.frame(stations_hex)
-stations_df$cell_id <- stations_hex@cell_id
 cell_temps <- aggregate(temperature ~ cell_id, data = stations_df, FUN = mean)
 
 # Generate polygons and merge data

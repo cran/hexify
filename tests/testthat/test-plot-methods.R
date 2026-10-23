@@ -3,6 +3,7 @@
 # Tests for plot methods
 
 test_that("plot.HexData works with default settings", {
+  skip_on_cran()
   skip_if_not_installed("sf")
 
   df <- data.frame(
@@ -19,27 +20,28 @@ test_that("plot.HexData works with default settings", {
   })
 })
 
-test_that("jitter_points_in_cells(jitter = FALSE) snaps points to the cell centroid", {
+test_that("jitter_points_in_cells(jitter = FALSE) snaps points to the cell centre", {
   skip_if_not_installed("sf")
 
   # Many points in one cell
   df <- data.frame(lon = rep(2.35, 20), lat = rep(48.86, 20))
   result <- hexify(df, lon = "lon", lat = "lat", area_km2 = 200000)
-  hex_sf <- cell_to_sf(unique(result@cell_id), result@grid)
-
-  jittered <- hexify:::jitter_points_in_cells(result@cell_id, hex_sf, jitter = TRUE)
-  unjittered <- hexify:::jitter_points_in_cells(result@cell_id, hex_sf, jitter = FALSE)
+  jittered <- hexify:::jitter_points_in_cells(result@cell_id, result@grid, jitter = TRUE)
+  unjittered <- hexify:::jitter_points_in_cells(result@cell_id, result@grid, jitter = FALSE)
 
   # With jitter, 20 random points in the same cell are extremely unlikely
   # to all land on the exact same coordinate
   expect_true(length(unique(jittered$lon)) > 1 || length(unique(jittered$lat)) > 1)
 
-  # Without jitter, every point in the cell collapses to the same centroid
+  expect_equal(lonlat_to_cell(jittered$lon, jittered$lat, result@grid), result@cell_id)
+
+  # Without jitter, every point in the cell collapses to the cell centre
   expect_equal(length(unique(unjittered$lon)), 1)
   expect_equal(length(unique(unjittered$lat)), 1)
 })
 
 test_that("plot.HexData accepts jitter and point_alpha arguments", {
+  skip_on_cran()
   skip_if_not_installed("sf")
 
   df <- data.frame(
@@ -95,7 +97,60 @@ test_that("plot.HexData works with custom sf basemap", {
   })
 })
 
+test_that("plot.HexData works with an sfc basemap", {
+  skip_on_cran()
+  skip_if_not_installed("sf")
+
+  df <- data.frame(lon = c(2.35, 4.90), lat = c(48.86, 52.37))
+  result <- hexify(df, lon = "lon", lat = "lat", area_km2 = 10000)
+
+  # Geometry column only: no rows to count when clipping
+  custom_basemap <- sf::st_geometry(hexify_world)
+
+  expect_no_error({
+    pdf(NULL)
+    on.exit(dev.off())
+    suppressMessages(plot(result, basemap = custom_basemap))
+  })
+})
+
+test_that("plot.HexData works with a SpatRaster basemap", {
+  skip_on_cran()
+  skip_if_not_installed("sf")
+  skip_if_not_installed("terra")
+
+  df <- data.frame(lon = c(2.35, 4.90), lat = c(48.86, 52.37))
+  result <- hexify(df, lon = "lon", lat = "lat", area_km2 = 10000)
+
+  r <- terra::rast(nrows = 20, ncols = 20,
+                   xmin = -10, xmax = 15, ymin = 40, ymax = 55)
+  terra::values(r) <- seq_len(400)
+
+  expect_no_error({
+    pdf(NULL)
+    on.exit(dev.off())
+    suppressMessages(plot(result, basemap = r))
+  })
+})
+
+test_that("plot.HexData works with the world_hires basemap", {
+  skip_on_cran()
+  skip_if_not_installed("sf")
+  skip_if_not_installed("rnaturalearth")
+  skip_if_not_installed("rnaturalearthdata")
+
+  df <- data.frame(lon = c(2.35, 4.90), lat = c(48.86, 52.37))
+  result <- hexify(df, lon = "lon", lat = "lat", area_km2 = 10000)
+
+  expect_no_error({
+    pdf(NULL)
+    on.exit(dev.off())
+    suppressMessages(plot(result, basemap = "world_hires"))
+  })
+})
+
 test_that("plot.HexData works with show_points", {
+  skip_on_cran()
   skip_if_not_installed("sf")
 
   df <- data.frame(
@@ -112,6 +167,7 @@ test_that("plot.HexData works with show_points", {
 })
 
 test_that("plot.HexData works with point_size presets", {
+  skip_on_cran()
   skip_if_not_installed("sf")
 
   df <- data.frame(
@@ -130,6 +186,7 @@ test_that("plot.HexData works with point_size presets", {
 })
 
 test_that("plot.HexData works with numeric point_size", {
+  skip_on_cran()
   skip_if_not_installed("sf")
 
   df <- data.frame(
@@ -146,6 +203,7 @@ test_that("plot.HexData works with numeric point_size", {
 })
 
 test_that("plot.HexData works with fill mapping", {
+  skip_on_cran()
   skip_if_not_installed("sf")
 
   df <- data.frame(
@@ -163,6 +221,7 @@ test_that("plot.HexData works with fill mapping", {
 })
 
 test_that("plot.HexData works with discrete fill", {
+  skip_on_cran()
   skip_if_not_installed("sf")
 
   df <- data.frame(
@@ -180,6 +239,7 @@ test_that("plot.HexData works with discrete fill", {
 })
 
 test_that("plot.HexData errors on invalid fill column", {
+  skip_on_cran()
   skip_if_not_installed("sf")
 
   df <- data.frame(
@@ -196,6 +256,7 @@ test_that("plot.HexData errors on invalid fill column", {
 })
 
 test_that("plot.HexData works with crop = FALSE", {
+  skip_on_cran()
   skip_if_not_installed("sf")
 
   df <- data.frame(
@@ -212,6 +273,7 @@ test_that("plot.HexData works with crop = FALSE", {
 })
 
 test_that("plot.HexData works with clip_basemap = FALSE", {
+  skip_on_cran()
   skip_if_not_installed("sf")
 
   df <- data.frame(
@@ -228,6 +290,7 @@ test_that("plot.HexData works with clip_basemap = FALSE", {
 })
 
 test_that("plot.HexData works with custom colors", {
+  skip_on_cran()
   skip_if_not_installed("sf")
 
   df <- data.frame(
@@ -249,6 +312,7 @@ test_that("plot.HexData works with custom colors", {
 })
 
 test_that("plot.HexData returns HexData invisibly", {
+  skip_on_cran()
   skip_if_not_installed("sf")
 
   df <- data.frame(
@@ -264,6 +328,7 @@ test_that("plot.HexData returns HexData invisibly", {
 })
 
 test_that("plot.HexData works with title", {
+  skip_on_cran()
   skip_if_not_installed("sf")
 
   df <- data.frame(lon = c(2.35), lat = c(48.86))
@@ -277,6 +342,7 @@ test_that("plot.HexData works with title", {
 })
 
 test_that("plot.HexData warns on unknown point_size", {
+  skip_on_cran()
   skip_if_not_installed("sf")
 
   df <- data.frame(lon = c(2.35), lat = c(48.86))
@@ -290,6 +356,7 @@ test_that("plot.HexData warns on unknown point_size", {
 })
 
 test_that("plot_grid creates ggplot", {
+  skip_on_cran()
   skip_if_not_installed("sf")
   skip_if_not_installed("ggplot2")
 
@@ -301,6 +368,7 @@ test_that("plot_grid creates ggplot", {
 })
 
 test_that("plot_grid works with custom colors", {
+  skip_on_cran()
   skip_if_not_installed("sf")
   skip_if_not_installed("ggplot2")
 
@@ -314,6 +382,7 @@ test_that("plot_grid works with custom colors", {
 })
 
 test_that("plot_grid works with crop = FALSE", {
+  skip_on_cran()
   skip_if_not_installed("sf")
   skip_if_not_installed("ggplot2")
 
@@ -325,6 +394,7 @@ test_that("plot_grid works with crop = FALSE", {
 })
 
 test_that("plot_grid auto-generates title", {
+  skip_on_cran()
   skip_if_not_installed("sf")
   skip_if_not_installed("ggplot2")
 
@@ -336,6 +406,7 @@ test_that("plot_grid auto-generates title", {
 })
 
 test_that("plot_grid accepts custom title", {
+  skip_on_cran()
   skip_if_not_installed("sf")
   skip_if_not_installed("ggplot2")
 
@@ -347,6 +418,7 @@ test_that("plot_grid accepts custom title", {
 })
 
 test_that("plot.HexData works with 'very large' point_size", {
+  skip_on_cran()
   skip_if_not_installed("sf")
 
   df <- data.frame(
@@ -363,6 +435,7 @@ test_that("plot.HexData works with 'very large' point_size", {
 })
 
 test_that("plot.HexData works with 'verylarge' point_size variant", {
+  skip_on_cran()
   skip_if_not_installed("sf")
 
   df <- data.frame(

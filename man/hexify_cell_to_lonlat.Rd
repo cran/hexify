@@ -2,12 +2,12 @@
 % Please edit documentation in R/hexify_index.R
 \name{hexify_cell_to_lonlat}
 \alias{hexify_cell_to_lonlat}
-\title{Convert cell ID to longitude/latitude}
+\title{Convert Cell ID to Longitude/Latitude}
 \usage{
 hexify_cell_to_lonlat(cell_id, resolution, aperture)
 }
 \arguments{
-\item{cell_id}{Numeric vector of cell IDs (1-based)}
+\item{cell_id}{Cell IDs, from 1: integer64, or whole numbers below 2^53}
 
 \item{resolution}{Grid resolution (integer >= 0)}
 
@@ -28,7 +28,6 @@ coords <- hexify_cell_to_lonlat(1702, resolution = 5, aperture = 3)
 \code{\link{hexify_lonlat_to_cell}} for the forward operation
 
 Other coordinate conversion:
-\code{\link[=hexify_cell_id_to_quad_ij]{hexify_cell_id_to_quad_ij()}},
 \code{\link[=hexify_cell_to_icosa_tri]{hexify_cell_to_icosa_tri()}},
 \code{\link[=hexify_cell_to_plane]{hexify_cell_to_plane()}},
 \code{\link[=hexify_cell_to_quad_ij]{hexify_cell_to_quad_ij()}},

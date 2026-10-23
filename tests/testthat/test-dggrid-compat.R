@@ -215,7 +215,7 @@ test_that("hexify face assignment matches dggridR tnum", {
     ref <- load_validation_data(3, res)
 
     for (i in seq_len(nrow(ref))) {
-      face <- cpp_which_face(ref$lon[i], ref$lat[i])
+      face <- cpp_which_face(numeric(0), ref$lon[i], ref$lat[i])
 
       expect_equal(face, ref$tnum[i],
                    info = sprintf("Res %d, row %d: face mismatch for lon=%.4f, lat=%.4f (got %d, expected %d)",
@@ -234,7 +234,7 @@ test_that("hexify projection matches dggridR tx/ty", {
   ref <- load_validation_data(3, 5)  # Use res 5 data
 
   for (i in seq_len(nrow(ref))) {
-    proj <- cpp_snyder_forward(ref$lon[i], ref$lat[i])
+    proj <- cpp_icosa_forward(numeric(0), ref$lon[i], ref$lat[i])
     face <- unname(proj["face"])
     tx <- unname(proj["icosa_triangle_x"])
     ty <- unname(proj["icosa_triangle_y"])

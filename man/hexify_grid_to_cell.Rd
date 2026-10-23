@@ -2,7 +2,7 @@
 % Please edit documentation in R/hexify_conversions.R
 \name{hexify_grid_to_cell}
 \alias{hexify_grid_to_cell}
-\title{Convert longitude/latitude to cell ID using a grid object}
+\title{Convert Longitude/Latitude to Cell ID Using a Grid Object}
 \usage{
 hexify_grid_to_cell(grid, lon, lat)
 }
@@ -14,7 +14,7 @@ hexify_grid_to_cell(grid, lon, lat)
 \item{lat}{Numeric vector of latitudes in degrees}
 }
 \value{
-Numeric vector of cell IDs (1-based)
+\code{bit64::integer64} vector of cell IDs, from 1
 }
 \description{
 Grid-based wrapper for \code{\link{hexify_lonlat_to_cell}}. Converts
@@ -30,7 +30,6 @@ cell_ids <- hexify_grid_to_cell(grid, lon = c(0, 10), lat = c(45, 50))
 \code{\link{hexify_grid_cell_to_lonlat}} for the inverse operation
 
 Other coordinate conversion:
-\code{\link[=hexify_cell_id_to_quad_ij]{hexify_cell_id_to_quad_ij()}},
 \code{\link[=hexify_cell_to_icosa_tri]{hexify_cell_to_icosa_tri()}},
 \code{\link[=hexify_cell_to_lonlat]{hexify_cell_to_lonlat()}},
 \code{\link[=hexify_cell_to_plane]{hexify_cell_to_plane()}},

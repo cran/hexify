@@ -2,20 +2,34 @@
 % Please edit documentation in R/hexify_projection.R
 \name{hexify_inverse}
 \alias{hexify_inverse}
-\title{Inverse Snyder projection}
+\title{Inverse Face Projection}
 \usage{
-hexify_inverse(x, y, face, tol = NULL, max_iters = NULL)
+hexify_inverse(
+  x,
+  y,
+  face,
+  projection = c("isea", "fuller", "ivea", "ak", "akw"),
+  polyhedron = c("icosahedron", "octahedron", "tetrahedron")
+)
 }
 \arguments{
 \item{x}{X coordinate on face plane}
 
 \item{y}{Y coordinate on face plane}
 
-\item{face}{Face index (0-19)}
+\item{face}{Face index (0-19 on the icosahedron)}
 
-\item{tol}{Convergence tolerance (NULL for default)}
+\item{projection}{Face projection: \code{"isea"} (Snyder's equal-area
+projection), \code{"ivea"} (van Leeuwen and Strebe's vertex-oriented
+equal-area projection), \code{"fuller"} (Fuller's projection, defined
+on the icosahedron only), \code{"ak"} (Kaseorg's octahedral
+projection) or \code{"akw"} (Kaseorg's with Hex9's trained warp), both
+defined on the octahedron only}
 
-\item{max_iters}{Maximum iterations (NULL for default)}
+\item{polyhedron}{The solid: "icosahedron" (default), "octahedron" or
+"tetrahedron", in its default orientation. Snyder (1992) gives his
+equal-area projection for each; its angular distortion grows with the
+faces' size.}
 }
 \value{
 Named numeric vector: c(lon_deg, lat_deg)
@@ -32,10 +46,7 @@ Other projection:
 \code{\link[=hexify_face_centers]{hexify_face_centers()}},
 \code{\link[=hexify_forward]{hexify_forward()}},
 \code{\link[=hexify_forward_to_face]{hexify_forward_to_face()}},
-\code{\link[=hexify_get_precision]{hexify_get_precision()}},
-\code{\link[=hexify_projection_stats]{hexify_projection_stats()}},
-\code{\link[=hexify_set_precision]{hexify_set_precision()}},
-\code{\link[=hexify_set_verbose]{hexify_set_verbose()}},
 \code{\link[=hexify_which_face]{hexify_which_face()}}
 }
 \concept{projection}
+\keyword{internal}

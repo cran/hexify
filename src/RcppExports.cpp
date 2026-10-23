@@ -10,6 +10,139 @@ Rcpp::Rostream<true>&  Rcpp::Rcout = Rcpp::Rcpp_cout_get();
 Rcpp::Rostream<false>& Rcpp::Rcerr = Rcpp::Rcpp_cerr_get();
 #endif
 
+// cpp_globe_faces
+List cpp_globe_faces(NumericVector icosa, double max_len);
+RcppExport SEXP _hexify_cpp_globe_faces(SEXP icosaSEXP, SEXP max_lenSEXP) {
+BEGIN_RCPP
+    Rcpp::RObject rcpp_result_gen;
+    Rcpp::RNGScope rcpp_rngScope_gen;
+    Rcpp::traits::input_parameter< NumericVector >::type icosa(icosaSEXP);
+    Rcpp::traits::input_parameter< double >::type max_len(max_lenSEXP);
+    rcpp_result_gen = Rcpp::wrap(cpp_globe_faces(icosa, max_len));
+    return rcpp_result_gen;
+END_RCPP
+}
+// cpp_globe_projection
+List cpp_globe_projection(NumericVector icosa);
+RcppExport SEXP _hexify_cpp_globe_projection(SEXP icosaSEXP) {
+BEGIN_RCPP
+    Rcpp::RObject rcpp_result_gen;
+    Rcpp::RNGScope rcpp_rngScope_gen;
+    Rcpp::traits::input_parameter< NumericVector >::type icosa(icosaSEXP);
+    rcpp_result_gen = Rcpp::wrap(cpp_globe_projection(icosa));
+    return rcpp_result_gen;
+END_RCPP
+}
+// cpp_globe_polygons
+List cpp_globe_polygons(NumericVector icosa, List polygons, double max_len);
+RcppExport SEXP _hexify_cpp_globe_polygons(SEXP icosaSEXP, SEXP polygonsSEXP, SEXP max_lenSEXP) {
+BEGIN_RCPP
+    Rcpp::RObject rcpp_result_gen;
+    Rcpp::RNGScope rcpp_rngScope_gen;
+    Rcpp::traits::input_parameter< NumericVector >::type icosa(icosaSEXP);
+    Rcpp::traits::input_parameter< List >::type polygons(polygonsSEXP);
+    Rcpp::traits::input_parameter< double >::type max_len(max_lenSEXP);
+    rcpp_result_gen = Rcpp::wrap(cpp_globe_polygons(icosa, polygons, max_len));
+    return rcpp_result_gen;
+END_RCPP
+}
+// cpp_sphere_paths_on_faces
+NumericMatrix cpp_sphere_paths_on_faces(NumericVector icosa, NumericVector lon, NumericVector lat, IntegerVector path, double max_angle);
+RcppExport SEXP _hexify_cpp_sphere_paths_on_faces(SEXP icosaSEXP, SEXP lonSEXP, SEXP latSEXP, SEXP pathSEXP, SEXP max_angleSEXP) {
+BEGIN_RCPP
+    Rcpp::RObject rcpp_result_gen;
+    Rcpp::RNGScope rcpp_rngScope_gen;
+    Rcpp::traits::input_parameter< NumericVector >::type icosa(icosaSEXP);
+    Rcpp::traits::input_parameter< NumericVector >::type lon(lonSEXP);
+    Rcpp::traits::input_parameter< NumericVector >::type lat(latSEXP);
+    Rcpp::traits::input_parameter< IntegerVector >::type path(pathSEXP);
+    Rcpp::traits::input_parameter< double >::type max_angle(max_angleSEXP);
+    rcpp_result_gen = Rcpp::wrap(cpp_sphere_paths_on_faces(icosa, lon, lat, path, max_angle));
+    return rcpp_result_gen;
+END_RCPP
+}
+// cpp_base64_buffer
+std::string cpp_base64_buffer(NumericVector x, std::string type);
+RcppExport SEXP _hexify_cpp_base64_buffer(SEXP xSEXP, SEXP typeSEXP) {
+BEGIN_RCPP
+    Rcpp::RObject rcpp_result_gen;
+    Rcpp::RNGScope rcpp_rngScope_gen;
+    Rcpp::traits::input_parameter< NumericVector >::type x(xSEXP);
+    Rcpp::traits::input_parameter< std::string >::type type(typeSEXP);
+    rcpp_result_gen = Rcpp::wrap(cpp_base64_buffer(x, type));
+    return rcpp_result_gen;
+END_RCPP
+}
+// cpp_base64_bytes
+std::string cpp_base64_bytes(RawVector x);
+RcppExport SEXP _hexify_cpp_base64_bytes(SEXP xSEXP) {
+BEGIN_RCPP
+    Rcpp::RObject rcpp_result_gen;
+    Rcpp::RNGScope rcpp_rngScope_gen;
+    Rcpp::traits::input_parameter< RawVector >::type x(xSEXP);
+    rcpp_result_gen = Rcpp::wrap(cpp_base64_bytes(x));
+    return rcpp_result_gen;
+END_RCPP
+}
+// cpp_base64_decode
+RawVector cpp_base64_decode(std::string text);
+RcppExport SEXP _hexify_cpp_base64_decode(SEXP textSEXP) {
+BEGIN_RCPP
+    Rcpp::RObject rcpp_result_gen;
+    Rcpp::RNGScope rcpp_rngScope_gen;
+    Rcpp::traits::input_parameter< std::string >::type text(textSEXP);
+    rcpp_result_gen = Rcpp::wrap(cpp_base64_decode(text));
+    return rcpp_result_gen;
+END_RCPP
+}
+// cpp_globe_table
+List cpp_globe_table(NumericVector icosa, List levels, NumericVector cell_id, NumericVector values, bool all_cells, NumericVector ramp, std::string layout, bool listing);
+RcppExport SEXP _hexify_cpp_globe_table(SEXP icosaSEXP, SEXP levelsSEXP, SEXP cell_idSEXP, SEXP valuesSEXP, SEXP all_cellsSEXP, SEXP rampSEXP, SEXP layoutSEXP, SEXP listingSEXP) {
+BEGIN_RCPP
+    Rcpp::RObject rcpp_result_gen;
+    Rcpp::RNGScope rcpp_rngScope_gen;
+    Rcpp::traits::input_parameter< NumericVector >::type icosa(icosaSEXP);
+    Rcpp::traits::input_parameter< List >::type levels(levelsSEXP);
+    Rcpp::traits::input_parameter< NumericVector >::type cell_id(cell_idSEXP);
+    Rcpp::traits::input_parameter< NumericVector >::type values(valuesSEXP);
+    Rcpp::traits::input_parameter< bool >::type all_cells(all_cellsSEXP);
+    Rcpp::traits::input_parameter< NumericVector >::type ramp(rampSEXP);
+    Rcpp::traits::input_parameter< std::string >::type layout(layoutSEXP);
+    Rcpp::traits::input_parameter< bool >::type listing(listingSEXP);
+    rcpp_result_gen = Rcpp::wrap(cpp_globe_table(icosa, levels, cell_id, values, all_cells, ramp, layout, listing));
+    return rcpp_result_gen;
+END_RCPP
+}
+// cpp_globe_keys
+NumericVector cpp_globe_keys(NumericVector icosa, NumericVector cell_id, int resolution, int aperture, IntegerVector ap_seq);
+RcppExport SEXP _hexify_cpp_globe_keys(SEXP icosaSEXP, SEXP cell_idSEXP, SEXP resolutionSEXP, SEXP apertureSEXP, SEXP ap_seqSEXP) {
+BEGIN_RCPP
+    Rcpp::RObject rcpp_result_gen;
+    Rcpp::RNGScope rcpp_rngScope_gen;
+    Rcpp::traits::input_parameter< NumericVector >::type icosa(icosaSEXP);
+    Rcpp::traits::input_parameter< NumericVector >::type cell_id(cell_idSEXP);
+    Rcpp::traits::input_parameter< int >::type resolution(resolutionSEXP);
+    Rcpp::traits::input_parameter< int >::type aperture(apertureSEXP);
+    Rcpp::traits::input_parameter< IntegerVector >::type ap_seq(ap_seqSEXP);
+    rcpp_result_gen = Rcpp::wrap(cpp_globe_keys(icosa, cell_id, resolution, aperture, ap_seq));
+    return rcpp_result_gen;
+END_RCPP
+}
+// cpp_globe_key_cells
+NumericVector cpp_globe_key_cells(NumericVector icosa, NumericVector key, int resolution, int aperture, IntegerVector ap_seq);
+RcppExport SEXP _hexify_cpp_globe_key_cells(SEXP icosaSEXP, SEXP keySEXP, SEXP resolutionSEXP, SEXP apertureSEXP, SEXP ap_seqSEXP) {
+BEGIN_RCPP
+    Rcpp::RObject rcpp_result_gen;
+    Rcpp::RNGScope rcpp_rngScope_gen;
+    Rcpp::traits::input_parameter< NumericVector >::type icosa(icosaSEXP);
+    Rcpp::traits::input_parameter< NumericVector >::type key(keySEXP);
+    Rcpp::traits::input_parameter< int >::type resolution(resolutionSEXP);
+    Rcpp::traits::input_parameter< int >::type aperture(apertureSEXP);
+    Rcpp::traits::input_parameter< IntegerVector >::type ap_seq(ap_seqSEXP);
+    rcpp_result_gen = Rcpp::wrap(cpp_globe_key_cells(icosa, key, resolution, aperture, ap_seq));
+    return rcpp_result_gen;
+END_RCPP
+}
 // cpp_hex_quantize_ap3
 NumericVector cpp_hex_quantize_ap3(double icosa_triangle_x, double icosa_triangle_y, int resolution);
 RcppExport SEXP _hexify_cpp_hex_quantize_ap3(SEXP icosa_triangle_xSEXP, SEXP icosa_triangle_ySEXP, SEXP resolutionSEXP) {
@@ -369,56 +502,47 @@ BEGIN_RCPP
     return rcpp_result_gen;
 END_RCPP
 }
-// cpp_decode_z7
-DataFrame cpp_decode_z7(std::string index_body, int aperture);
-RcppExport SEXP _hexify_cpp_decode_z7(SEXP index_bodySEXP, SEXP apertureSEXP) {
-BEGIN_RCPP
-    Rcpp::RObject rcpp_result_gen;
-    Rcpp::RNGScope rcpp_rngScope_gen;
-    Rcpp::traits::input_parameter< std::string >::type index_body(index_bodySEXP);
-    Rcpp::traits::input_parameter< int >::type aperture(apertureSEXP);
-    rcpp_result_gen = Rcpp::wrap(cpp_decode_z7(index_body, aperture));
-    return rcpp_result_gen;
-END_RCPP
-}
 // cpp_icosa_tri_to_quad_ij
-Rcpp::List cpp_icosa_tri_to_quad_ij(int icosa_triangle_face, double icosa_triangle_x, double icosa_triangle_y, int aperture, int resolution);
-RcppExport SEXP _hexify_cpp_icosa_tri_to_quad_ij(SEXP icosa_triangle_faceSEXP, SEXP icosa_triangle_xSEXP, SEXP icosa_triangle_ySEXP, SEXP apertureSEXP, SEXP resolutionSEXP) {
+Rcpp::List cpp_icosa_tri_to_quad_ij(NumericVector icosa, int icosa_triangle_face, double icosa_triangle_x, double icosa_triangle_y, int aperture, int resolution);
+RcppExport SEXP _hexify_cpp_icosa_tri_to_quad_ij(SEXP icosaSEXP, SEXP icosa_triangle_faceSEXP, SEXP icosa_triangle_xSEXP, SEXP icosa_triangle_ySEXP, SEXP apertureSEXP, SEXP resolutionSEXP) {
 BEGIN_RCPP
     Rcpp::RObject rcpp_result_gen;
     Rcpp::RNGScope rcpp_rngScope_gen;
+    Rcpp::traits::input_parameter< NumericVector >::type icosa(icosaSEXP);
     Rcpp::traits::input_parameter< int >::type icosa_triangle_face(icosa_triangle_faceSEXP);
     Rcpp::traits::input_parameter< double >::type icosa_triangle_x(icosa_triangle_xSEXP);
     Rcpp::traits::input_parameter< double >::type icosa_triangle_y(icosa_triangle_ySEXP);
     Rcpp::traits::input_parameter< int >::type aperture(apertureSEXP);
     Rcpp::traits::input_parameter< int >::type resolution(resolutionSEXP);
-    rcpp_result_gen = Rcpp::wrap(cpp_icosa_tri_to_quad_ij(icosa_triangle_face, icosa_triangle_x, icosa_triangle_y, aperture, resolution));
+    rcpp_result_gen = Rcpp::wrap(cpp_icosa_tri_to_quad_ij(icosa, icosa_triangle_face, icosa_triangle_x, icosa_triangle_y, aperture, resolution));
     return rcpp_result_gen;
 END_RCPP
 }
 // cpp_icosa_tri_to_quad_xy
-Rcpp::List cpp_icosa_tri_to_quad_xy(int icosa_triangle_face, double icosa_triangle_x, double icosa_triangle_y);
-RcppExport SEXP _hexify_cpp_icosa_tri_to_quad_xy(SEXP icosa_triangle_faceSEXP, SEXP icosa_triangle_xSEXP, SEXP icosa_triangle_ySEXP) {
+Rcpp::List cpp_icosa_tri_to_quad_xy(NumericVector icosa, int icosa_triangle_face, double icosa_triangle_x, double icosa_triangle_y);
+RcppExport SEXP _hexify_cpp_icosa_tri_to_quad_xy(SEXP icosaSEXP, SEXP icosa_triangle_faceSEXP, SEXP icosa_triangle_xSEXP, SEXP icosa_triangle_ySEXP) {
 BEGIN_RCPP
     Rcpp::RObject rcpp_result_gen;
     Rcpp::RNGScope rcpp_rngScope_gen;
+    Rcpp::traits::input_parameter< NumericVector >::type icosa(icosaSEXP);
     Rcpp::traits::input_parameter< int >::type icosa_triangle_face(icosa_triangle_faceSEXP);
     Rcpp::traits::input_parameter< double >::type icosa_triangle_x(icosa_triangle_xSEXP);
     Rcpp::traits::input_parameter< double >::type icosa_triangle_y(icosa_triangle_ySEXP);
-    rcpp_result_gen = Rcpp::wrap(cpp_icosa_tri_to_quad_xy(icosa_triangle_face, icosa_triangle_x, icosa_triangle_y));
+    rcpp_result_gen = Rcpp::wrap(cpp_icosa_tri_to_quad_xy(icosa, icosa_triangle_face, icosa_triangle_x, icosa_triangle_y));
     return rcpp_result_gen;
 END_RCPP
 }
 // cpp_quad_xy_to_icosa_tri
-Rcpp::List cpp_quad_xy_to_icosa_tri(int quad, double quad_x, double quad_y);
-RcppExport SEXP _hexify_cpp_quad_xy_to_icosa_tri(SEXP quadSEXP, SEXP quad_xSEXP, SEXP quad_ySEXP) {
+Rcpp::List cpp_quad_xy_to_icosa_tri(NumericVector icosa, int quad, double quad_x, double quad_y);
+RcppExport SEXP _hexify_cpp_quad_xy_to_icosa_tri(SEXP icosaSEXP, SEXP quadSEXP, SEXP quad_xSEXP, SEXP quad_ySEXP) {
 BEGIN_RCPP
     Rcpp::RObject rcpp_result_gen;
     Rcpp::RNGScope rcpp_rngScope_gen;
+    Rcpp::traits::input_parameter< NumericVector >::type icosa(icosaSEXP);
     Rcpp::traits::input_parameter< int >::type quad(quadSEXP);
     Rcpp::traits::input_parameter< double >::type quad_x(quad_xSEXP);
     Rcpp::traits::input_parameter< double >::type quad_y(quad_ySEXP);
-    rcpp_result_gen = Rcpp::wrap(cpp_quad_xy_to_icosa_tri(quad, quad_x, quad_y));
+    rcpp_result_gen = Rcpp::wrap(cpp_quad_xy_to_icosa_tri(icosa, quad, quad_x, quad_y));
     return rcpp_result_gen;
 END_RCPP
 }
@@ -438,302 +562,492 @@ BEGIN_RCPP
 END_RCPP
 }
 // cpp_lonlat_to_quad_ij
-Rcpp::List cpp_lonlat_to_quad_ij(double lon_deg, double lat_deg, int aperture, int resolution);
-RcppExport SEXP _hexify_cpp_lonlat_to_quad_ij(SEXP lon_degSEXP, SEXP lat_degSEXP, SEXP apertureSEXP, SEXP resolutionSEXP) {
+Rcpp::List cpp_lonlat_to_quad_ij(NumericVector icosa, double lon_deg, double lat_deg, int aperture, int resolution);
+RcppExport SEXP _hexify_cpp_lonlat_to_quad_ij(SEXP icosaSEXP, SEXP lon_degSEXP, SEXP lat_degSEXP, SEXP apertureSEXP, SEXP resolutionSEXP) {
 BEGIN_RCPP
     Rcpp::RObject rcpp_result_gen;
     Rcpp::RNGScope rcpp_rngScope_gen;
+    Rcpp::traits::input_parameter< NumericVector >::type icosa(icosaSEXP);
     Rcpp::traits::input_parameter< double >::type lon_deg(lon_degSEXP);
     Rcpp::traits::input_parameter< double >::type lat_deg(lat_degSEXP);
     Rcpp::traits::input_parameter< int >::type aperture(apertureSEXP);
     Rcpp::traits::input_parameter< int >::type resolution(resolutionSEXP);
-    rcpp_result_gen = Rcpp::wrap(cpp_lonlat_to_quad_ij(lon_deg, lat_deg, aperture, resolution));
+    rcpp_result_gen = Rcpp::wrap(cpp_lonlat_to_quad_ij(icosa, lon_deg, lat_deg, aperture, resolution));
+    return rcpp_result_gen;
+END_RCPP
+}
+// cpp_quad_edge_dim
+double cpp_quad_edge_dim(int resolution, int aperture, IntegerVector ap_seq);
+RcppExport SEXP _hexify_cpp_quad_edge_dim(SEXP resolutionSEXP, SEXP apertureSEXP, SEXP ap_seqSEXP) {
+BEGIN_RCPP
+    Rcpp::RObject rcpp_result_gen;
+    Rcpp::RNGScope rcpp_rngScope_gen;
+    Rcpp::traits::input_parameter< int >::type resolution(resolutionSEXP);
+    Rcpp::traits::input_parameter< int >::type aperture(apertureSEXP);
+    Rcpp::traits::input_parameter< IntegerVector >::type ap_seq(ap_seqSEXP);
+    rcpp_result_gen = Rcpp::wrap(cpp_quad_edge_dim(resolution, aperture, ap_seq));
+    return rcpp_result_gen;
+END_RCPP
+}
+// cpp_grid_n_cells
+NumericVector cpp_grid_n_cells(NumericVector icosa, int resolution, int aperture, IntegerVector ap_seq);
+RcppExport SEXP _hexify_cpp_grid_n_cells(SEXP icosaSEXP, SEXP resolutionSEXP, SEXP apertureSEXP, SEXP ap_seqSEXP) {
+BEGIN_RCPP
+    Rcpp::RObject rcpp_result_gen;
+    Rcpp::RNGScope rcpp_rngScope_gen;
+    Rcpp::traits::input_parameter< NumericVector >::type icosa(icosaSEXP);
+    Rcpp::traits::input_parameter< int >::type resolution(resolutionSEXP);
+    Rcpp::traits::input_parameter< int >::type aperture(apertureSEXP);
+    Rcpp::traits::input_parameter< IntegerVector >::type ap_seq(ap_seqSEXP);
+    rcpp_result_gen = Rcpp::wrap(cpp_grid_n_cells(icosa, resolution, aperture, ap_seq));
+    return rcpp_result_gen;
+END_RCPP
+}
+// cpp_cell_lattice_generator
+NumericVector cpp_cell_lattice_generator(int resolution, int aperture, IntegerVector ap_seq);
+RcppExport SEXP _hexify_cpp_cell_lattice_generator(SEXP resolutionSEXP, SEXP apertureSEXP, SEXP ap_seqSEXP) {
+BEGIN_RCPP
+    Rcpp::RObject rcpp_result_gen;
+    Rcpp::RNGScope rcpp_rngScope_gen;
+    Rcpp::traits::input_parameter< int >::type resolution(resolutionSEXP);
+    Rcpp::traits::input_parameter< int >::type aperture(apertureSEXP);
+    Rcpp::traits::input_parameter< IntegerVector >::type ap_seq(ap_seqSEXP);
+    rcpp_result_gen = Rcpp::wrap(cpp_cell_lattice_generator(resolution, aperture, ap_seq));
     return rcpp_result_gen;
 END_RCPP
 }
 // cpp_quad_ij_to_cell
-NumericVector cpp_quad_ij_to_cell(IntegerVector quad, NumericVector i, NumericVector j, int resolution, int aperture);
-RcppExport SEXP _hexify_cpp_quad_ij_to_cell(SEXP quadSEXP, SEXP iSEXP, SEXP jSEXP, SEXP resolutionSEXP, SEXP apertureSEXP) {
+NumericVector cpp_quad_ij_to_cell(NumericVector icosa, IntegerVector quad, NumericVector i, NumericVector j, int resolution, int aperture, IntegerVector ap_seq);
+RcppExport SEXP _hexify_cpp_quad_ij_to_cell(SEXP icosaSEXP, SEXP quadSEXP, SEXP iSEXP, SEXP jSEXP, SEXP resolutionSEXP, SEXP apertureSEXP, SEXP ap_seqSEXP) {
 BEGIN_RCPP
     Rcpp::RObject rcpp_result_gen;
     Rcpp::RNGScope rcpp_rngScope_gen;
+    Rcpp::traits::input_parameter< NumericVector >::type icosa(icosaSEXP);
     Rcpp::traits::input_parameter< IntegerVector >::type quad(quadSEXP);
     Rcpp::traits::input_parameter< NumericVector >::type i(iSEXP);
     Rcpp::traits::input_parameter< NumericVector >::type j(jSEXP);
     Rcpp::traits::input_parameter< int >::type resolution(resolutionSEXP);
     Rcpp::traits::input_parameter< int >::type aperture(apertureSEXP);
-    rcpp_result_gen = Rcpp::wrap(cpp_quad_ij_to_cell(quad, i, j, resolution, aperture));
+    Rcpp::traits::input_parameter< IntegerVector >::type ap_seq(ap_seqSEXP);
+    rcpp_result_gen = Rcpp::wrap(cpp_quad_ij_to_cell(icosa, quad, i, j, resolution, aperture, ap_seq));
+    return rcpp_result_gen;
+END_RCPP
+}
+// cpp_cell_to_z7
+SEXP cpp_cell_to_z7(NumericVector icosa, NumericVector cell_id, int resolution, std::string form);
+RcppExport SEXP _hexify_cpp_cell_to_z7(SEXP icosaSEXP, SEXP cell_idSEXP, SEXP resolutionSEXP, SEXP formSEXP) {
+BEGIN_RCPP
+    Rcpp::RObject rcpp_result_gen;
+    Rcpp::RNGScope rcpp_rngScope_gen;
+    Rcpp::traits::input_parameter< NumericVector >::type icosa(icosaSEXP);
+    Rcpp::traits::input_parameter< NumericVector >::type cell_id(cell_idSEXP);
+    Rcpp::traits::input_parameter< int >::type resolution(resolutionSEXP);
+    Rcpp::traits::input_parameter< std::string >::type form(formSEXP);
+    rcpp_result_gen = Rcpp::wrap(cpp_cell_to_z7(icosa, cell_id, resolution, form));
+    return rcpp_result_gen;
+END_RCPP
+}
+// cpp_z7_to_cell
+NumericVector cpp_z7_to_cell(NumericVector icosa, SEXP index, int resolution, std::string form);
+RcppExport SEXP _hexify_cpp_z7_to_cell(SEXP icosaSEXP, SEXP indexSEXP, SEXP resolutionSEXP, SEXP formSEXP) {
+BEGIN_RCPP
+    Rcpp::RObject rcpp_result_gen;
+    Rcpp::RNGScope rcpp_rngScope_gen;
+    Rcpp::traits::input_parameter< NumericVector >::type icosa(icosaSEXP);
+    Rcpp::traits::input_parameter< SEXP >::type index(indexSEXP);
+    Rcpp::traits::input_parameter< int >::type resolution(resolutionSEXP);
+    Rcpp::traits::input_parameter< std::string >::type form(formSEXP);
+    rcpp_result_gen = Rcpp::wrap(cpp_z7_to_cell(icosa, index, resolution, form));
+    return rcpp_result_gen;
+END_RCPP
+}
+// cpp_mixed_parent
+NumericVector cpp_mixed_parent(NumericVector icosa, NumericVector cell_id, IntegerVector ap_seq, IntegerVector parent_seq);
+RcppExport SEXP _hexify_cpp_mixed_parent(SEXP icosaSEXP, SEXP cell_idSEXP, SEXP ap_seqSEXP, SEXP parent_seqSEXP) {
+BEGIN_RCPP
+    Rcpp::RObject rcpp_result_gen;
+    Rcpp::RNGScope rcpp_rngScope_gen;
+    Rcpp::traits::input_parameter< NumericVector >::type icosa(icosaSEXP);
+    Rcpp::traits::input_parameter< NumericVector >::type cell_id(cell_idSEXP);
+    Rcpp::traits::input_parameter< IntegerVector >::type ap_seq(ap_seqSEXP);
+    Rcpp::traits::input_parameter< IntegerVector >::type parent_seq(parent_seqSEXP);
+    rcpp_result_gen = Rcpp::wrap(cpp_mixed_parent(icosa, cell_id, ap_seq, parent_seq));
     return rcpp_result_gen;
 END_RCPP
 }
 // cpp_lonlat_to_cell
-NumericVector cpp_lonlat_to_cell(NumericVector lon, NumericVector lat, int resolution, int aperture);
-RcppExport SEXP _hexify_cpp_lonlat_to_cell(SEXP lonSEXP, SEXP latSEXP, SEXP resolutionSEXP, SEXP apertureSEXP) {
+NumericVector cpp_lonlat_to_cell(NumericVector icosa, NumericVector lon, NumericVector lat, int resolution, int aperture, IntegerVector ap_seq);
+RcppExport SEXP _hexify_cpp_lonlat_to_cell(SEXP icosaSEXP, SEXP lonSEXP, SEXP latSEXP, SEXP resolutionSEXP, SEXP apertureSEXP, SEXP ap_seqSEXP) {
 BEGIN_RCPP
     Rcpp::RObject rcpp_result_gen;
     Rcpp::RNGScope rcpp_rngScope_gen;
+    Rcpp::traits::input_parameter< NumericVector >::type icosa(icosaSEXP);
     Rcpp::traits::input_parameter< NumericVector >::type lon(lonSEXP);
     Rcpp::traits::input_parameter< NumericVector >::type lat(latSEXP);
     Rcpp::traits::input_parameter< int >::type resolution(resolutionSEXP);
     Rcpp::traits::input_parameter< int >::type aperture(apertureSEXP);
-    rcpp_result_gen = Rcpp::wrap(cpp_lonlat_to_cell(lon, lat, resolution, aperture));
+    Rcpp::traits::input_parameter< IntegerVector >::type ap_seq(ap_seqSEXP);
+    rcpp_result_gen = Rcpp::wrap(cpp_lonlat_to_cell(icosa, lon, lat, resolution, aperture, ap_seq));
     return rcpp_result_gen;
 END_RCPP
 }
 // cpp_cell_to_lonlat
-DataFrame cpp_cell_to_lonlat(NumericVector cell_id, int resolution, int aperture);
-RcppExport SEXP _hexify_cpp_cell_to_lonlat(SEXP cell_idSEXP, SEXP resolutionSEXP, SEXP apertureSEXP) {
+DataFrame cpp_cell_to_lonlat(NumericVector icosa, NumericVector cell_id, int resolution, int aperture, IntegerVector ap_seq);
+RcppExport SEXP _hexify_cpp_cell_to_lonlat(SEXP icosaSEXP, SEXP cell_idSEXP, SEXP resolutionSEXP, SEXP apertureSEXP, SEXP ap_seqSEXP) {
 BEGIN_RCPP
     Rcpp::RObject rcpp_result_gen;
     Rcpp::RNGScope rcpp_rngScope_gen;
+    Rcpp::traits::input_parameter< NumericVector >::type icosa(icosaSEXP);
     Rcpp::traits::input_parameter< NumericVector >::type cell_id(cell_idSEXP);
     Rcpp::traits::input_parameter< int >::type resolution(resolutionSEXP);
     Rcpp::traits::input_parameter< int >::type aperture(apertureSEXP);
-    rcpp_result_gen = Rcpp::wrap(cpp_cell_to_lonlat(cell_id, resolution, aperture));
+    Rcpp::traits::input_parameter< IntegerVector >::type ap_seq(ap_seqSEXP);
+    rcpp_result_gen = Rcpp::wrap(cpp_cell_to_lonlat(icosa, cell_id, resolution, aperture, ap_seq));
     return rcpp_result_gen;
 END_RCPP
 }
 // cpp_cell_to_quad_ij
-DataFrame cpp_cell_to_quad_ij(NumericVector cell_id, int resolution, int aperture);
-RcppExport SEXP _hexify_cpp_cell_to_quad_ij(SEXP cell_idSEXP, SEXP resolutionSEXP, SEXP apertureSEXP) {
+DataFrame cpp_cell_to_quad_ij(NumericVector icosa, NumericVector cell_id, int resolution, int aperture, IntegerVector ap_seq);
+RcppExport SEXP _hexify_cpp_cell_to_quad_ij(SEXP icosaSEXP, SEXP cell_idSEXP, SEXP resolutionSEXP, SEXP apertureSEXP, SEXP ap_seqSEXP) {
 BEGIN_RCPP
     Rcpp::RObject rcpp_result_gen;
     Rcpp::RNGScope rcpp_rngScope_gen;
+    Rcpp::traits::input_parameter< NumericVector >::type icosa(icosaSEXP);
     Rcpp::traits::input_parameter< NumericVector >::type cell_id(cell_idSEXP);
     Rcpp::traits::input_parameter< int >::type resolution(resolutionSEXP);
     Rcpp::traits::input_parameter< int >::type aperture(apertureSEXP);
-    rcpp_result_gen = Rcpp::wrap(cpp_cell_to_quad_ij(cell_id, resolution, aperture));
+    Rcpp::traits::input_parameter< IntegerVector >::type ap_seq(ap_seqSEXP);
+    rcpp_result_gen = Rcpp::wrap(cpp_cell_to_quad_ij(icosa, cell_id, resolution, aperture, ap_seq));
     return rcpp_result_gen;
 END_RCPP
 }
 // cpp_cell_to_quad_xy
-DataFrame cpp_cell_to_quad_xy(NumericVector cell_id, int resolution, int aperture);
-RcppExport SEXP _hexify_cpp_cell_to_quad_xy(SEXP cell_idSEXP, SEXP resolutionSEXP, SEXP apertureSEXP) {
+DataFrame cpp_cell_to_quad_xy(NumericVector icosa, NumericVector cell_id, int resolution, int aperture);
+RcppExport SEXP _hexify_cpp_cell_to_quad_xy(SEXP icosaSEXP, SEXP cell_idSEXP, SEXP resolutionSEXP, SEXP apertureSEXP) {
 BEGIN_RCPP
     Rcpp::RObject rcpp_result_gen;
     Rcpp::RNGScope rcpp_rngScope_gen;
+    Rcpp::traits::input_parameter< NumericVector >::type icosa(icosaSEXP);
     Rcpp::traits::input_parameter< NumericVector >::type cell_id(cell_idSEXP);
     Rcpp::traits::input_parameter< int >::type resolution(resolutionSEXP);
     Rcpp::traits::input_parameter< int >::type aperture(apertureSEXP);
-    rcpp_result_gen = Rcpp::wrap(cpp_cell_to_quad_xy(cell_id, resolution, aperture));
+    rcpp_result_gen = Rcpp::wrap(cpp_cell_to_quad_xy(icosa, cell_id, resolution, aperture));
     return rcpp_result_gen;
 END_RCPP
 }
 // cpp_quad_xy_to_cell
-NumericVector cpp_quad_xy_to_cell(IntegerVector quad, NumericVector quad_x, NumericVector quad_y, int resolution, int aperture);
-RcppExport SEXP _hexify_cpp_quad_xy_to_cell(SEXP quadSEXP, SEXP quad_xSEXP, SEXP quad_ySEXP, SEXP resolutionSEXP, SEXP apertureSEXP) {
+NumericVector cpp_quad_xy_to_cell(NumericVector icosa, IntegerVector quad, NumericVector quad_x, NumericVector quad_y, int resolution, int aperture);
+RcppExport SEXP _hexify_cpp_quad_xy_to_cell(SEXP icosaSEXP, SEXP quadSEXP, SEXP quad_xSEXP, SEXP quad_ySEXP, SEXP resolutionSEXP, SEXP apertureSEXP) {
 BEGIN_RCPP
     Rcpp::RObject rcpp_result_gen;
     Rcpp::RNGScope rcpp_rngScope_gen;
+    Rcpp::traits::input_parameter< NumericVector >::type icosa(icosaSEXP);
     Rcpp::traits::input_parameter< IntegerVector >::type quad(quadSEXP);
     Rcpp::traits::input_parameter< NumericVector >::type quad_x(quad_xSEXP);
     Rcpp::traits::input_parameter< NumericVector >::type quad_y(quad_ySEXP);
     Rcpp::traits::input_parameter< int >::type resolution(resolutionSEXP);
     Rcpp::traits::input_parameter< int >::type aperture(apertureSEXP);
-    rcpp_result_gen = Rcpp::wrap(cpp_quad_xy_to_cell(quad, quad_x, quad_y, resolution, aperture));
+    rcpp_result_gen = Rcpp::wrap(cpp_quad_xy_to_cell(icosa, quad, quad_x, quad_y, resolution, aperture));
+    return rcpp_result_gen;
+END_RCPP
+}
+// cpp_quad_xy_to_lonlat
+DataFrame cpp_quad_xy_to_lonlat(NumericVector icosa, IntegerVector quad, NumericVector quad_x, NumericVector quad_y);
+RcppExport SEXP _hexify_cpp_quad_xy_to_lonlat(SEXP icosaSEXP, SEXP quadSEXP, SEXP quad_xSEXP, SEXP quad_ySEXP) {
+BEGIN_RCPP
+    Rcpp::RObject rcpp_result_gen;
+    Rcpp::RNGScope rcpp_rngScope_gen;
+    Rcpp::traits::input_parameter< NumericVector >::type icosa(icosaSEXP);
+    Rcpp::traits::input_parameter< IntegerVector >::type quad(quadSEXP);
+    Rcpp::traits::input_parameter< NumericVector >::type quad_x(quad_xSEXP);
+    Rcpp::traits::input_parameter< NumericVector >::type quad_y(quad_ySEXP);
+    rcpp_result_gen = Rcpp::wrap(cpp_quad_xy_to_lonlat(icosa, quad, quad_x, quad_y));
     return rcpp_result_gen;
 END_RCPP
 }
 // cpp_cell_to_icosa_tri
-DataFrame cpp_cell_to_icosa_tri(NumericVector cell_id, int resolution, int aperture);
-RcppExport SEXP _hexify_cpp_cell_to_icosa_tri(SEXP cell_idSEXP, SEXP resolutionSEXP, SEXP apertureSEXP) {
+DataFrame cpp_cell_to_icosa_tri(NumericVector icosa, NumericVector cell_id, int resolution, int aperture);
+RcppExport SEXP _hexify_cpp_cell_to_icosa_tri(SEXP icosaSEXP, SEXP cell_idSEXP, SEXP resolutionSEXP, SEXP apertureSEXP) {
 BEGIN_RCPP
     Rcpp::RObject rcpp_result_gen;
     Rcpp::RNGScope rcpp_rngScope_gen;
+    Rcpp::traits::input_parameter< NumericVector >::type icosa(icosaSEXP);
     Rcpp::traits::input_parameter< NumericVector >::type cell_id(cell_idSEXP);
     Rcpp::traits::input_parameter< int >::type resolution(resolutionSEXP);
     Rcpp::traits::input_parameter< int >::type aperture(apertureSEXP);
-    rcpp_result_gen = Rcpp::wrap(cpp_cell_to_icosa_tri(cell_id, resolution, aperture));
+    rcpp_result_gen = Rcpp::wrap(cpp_cell_to_icosa_tri(icosa, cell_id, resolution, aperture));
     return rcpp_result_gen;
 END_RCPP
 }
 // cpp_quad_ij_to_icosa_tri
-DataFrame cpp_quad_ij_to_icosa_tri(IntegerVector quad, NumericVector i, NumericVector j, int resolution, int aperture);
-RcppExport SEXP _hexify_cpp_quad_ij_to_icosa_tri(SEXP quadSEXP, SEXP iSEXP, SEXP jSEXP, SEXP resolutionSEXP, SEXP apertureSEXP) {
+DataFrame cpp_quad_ij_to_icosa_tri(NumericVector icosa, IntegerVector quad, NumericVector i, NumericVector j, int resolution, int aperture);
+RcppExport SEXP _hexify_cpp_quad_ij_to_icosa_tri(SEXP icosaSEXP, SEXP quadSEXP, SEXP iSEXP, SEXP jSEXP, SEXP resolutionSEXP, SEXP apertureSEXP) {
 BEGIN_RCPP
     Rcpp::RObject rcpp_result_gen;
     Rcpp::RNGScope rcpp_rngScope_gen;
+    Rcpp::traits::input_parameter< NumericVector >::type icosa(icosaSEXP);
     Rcpp::traits::input_parameter< IntegerVector >::type quad(quadSEXP);
     Rcpp::traits::input_parameter< NumericVector >::type i(iSEXP);
     Rcpp::traits::input_parameter< NumericVector >::type j(jSEXP);
     Rcpp::traits::input_parameter< int >::type resolution(resolutionSEXP);
     Rcpp::traits::input_parameter< int >::type aperture(apertureSEXP);
-    rcpp_result_gen = Rcpp::wrap(cpp_quad_ij_to_icosa_tri(quad, i, j, resolution, aperture));
+    rcpp_result_gen = Rcpp::wrap(cpp_quad_ij_to_icosa_tri(icosa, quad, i, j, resolution, aperture));
+    return rcpp_result_gen;
+END_RCPP
+}
+// cpp_pieces_need_split
+LogicalVector cpp_pieces_need_split(NumericVector alon, NumericVector alat, NumericVector mlon, NumericVector mlat, NumericVector blon, NumericVector blat, double tolerance, double max_arc, int depth);
+RcppExport SEXP _hexify_cpp_pieces_need_split(SEXP alonSEXP, SEXP alatSEXP, SEXP mlonSEXP, SEXP mlatSEXP, SEXP blonSEXP, SEXP blatSEXP, SEXP toleranceSEXP, SEXP max_arcSEXP, SEXP depthSEXP) {
+BEGIN_RCPP
+    Rcpp::RObject rcpp_result_gen;
+    Rcpp::RNGScope rcpp_rngScope_gen;
+    Rcpp::traits::input_parameter< NumericVector >::type alon(alonSEXP);
+    Rcpp::traits::input_parameter< NumericVector >::type alat(alatSEXP);
+    Rcpp::traits::input_parameter< NumericVector >::type mlon(mlonSEXP);
+    Rcpp::traits::input_parameter< NumericVector >::type mlat(mlatSEXP);
+    Rcpp::traits::input_parameter< NumericVector >::type blon(blonSEXP);
+    Rcpp::traits::input_parameter< NumericVector >::type blat(blatSEXP);
+    Rcpp::traits::input_parameter< double >::type tolerance(toleranceSEXP);
+    Rcpp::traits::input_parameter< double >::type max_arc(max_arcSEXP);
+    Rcpp::traits::input_parameter< int >::type depth(depthSEXP);
+    rcpp_result_gen = Rcpp::wrap(cpp_pieces_need_split(alon, alat, mlon, mlat, blon, blat, tolerance, max_arc, depth));
     return rcpp_result_gen;
 END_RCPP
 }
 // cpp_cell_to_corners
-List cpp_cell_to_corners(NumericVector cell_id, int resolution, int aperture);
-RcppExport SEXP _hexify_cpp_cell_to_corners(SEXP cell_idSEXP, SEXP resolutionSEXP, SEXP apertureSEXP) {
+List cpp_cell_to_corners(NumericVector icosa, NumericVector cell_id, int resolution, int aperture, IntegerVector ap_seq, double tolerance, double max_arc);
+RcppExport SEXP _hexify_cpp_cell_to_corners(SEXP icosaSEXP, SEXP cell_idSEXP, SEXP resolutionSEXP, SEXP apertureSEXP, SEXP ap_seqSEXP, SEXP toleranceSEXP, SEXP max_arcSEXP) {
 BEGIN_RCPP
     Rcpp::RObject rcpp_result_gen;
     Rcpp::RNGScope rcpp_rngScope_gen;
+    Rcpp::traits::input_parameter< NumericVector >::type icosa(icosaSEXP);
     Rcpp::traits::input_parameter< NumericVector >::type cell_id(cell_idSEXP);
     Rcpp::traits::input_parameter< int >::type resolution(resolutionSEXP);
     Rcpp::traits::input_parameter< int >::type aperture(apertureSEXP);
-    rcpp_result_gen = Rcpp::wrap(cpp_cell_to_corners(cell_id, resolution, aperture));
+    Rcpp::traits::input_parameter< IntegerVector >::type ap_seq(ap_seqSEXP);
+    Rcpp::traits::input_parameter< double >::type tolerance(toleranceSEXP);
+    Rcpp::traits::input_parameter< double >::type max_arc(max_arcSEXP);
+    rcpp_result_gen = Rcpp::wrap(cpp_cell_to_corners(icosa, cell_id, resolution, aperture, ap_seq, tolerance, max_arc));
     return rcpp_result_gen;
 END_RCPP
 }
-// cpp_cell_to_polygon
-DataFrame cpp_cell_to_polygon(NumericVector cell_id, int resolution, int aperture);
-RcppExport SEXP _hexify_cpp_cell_to_polygon(SEXP cell_idSEXP, SEXP resolutionSEXP, SEXP apertureSEXP) {
+// cpp_densify_great_circle
+List cpp_densify_great_circle(List rings, double tolerance, double max_arc);
+RcppExport SEXP _hexify_cpp_densify_great_circle(SEXP ringsSEXP, SEXP toleranceSEXP, SEXP max_arcSEXP) {
 BEGIN_RCPP
     Rcpp::RObject rcpp_result_gen;
     Rcpp::RNGScope rcpp_rngScope_gen;
+    Rcpp::traits::input_parameter< List >::type rings(ringsSEXP);
+    Rcpp::traits::input_parameter< double >::type tolerance(toleranceSEXP);
+    Rcpp::traits::input_parameter< double >::type max_arc(max_arcSEXP);
+    rcpp_result_gen = Rcpp::wrap(cpp_densify_great_circle(rings, tolerance, max_arc));
+    return rcpp_result_gen;
+END_RCPP
+}
+// cpp_cell_solid_angle
+NumericVector cpp_cell_solid_angle(NumericVector icosa, NumericVector cell_id, int resolution, int aperture, IntegerVector ap_seq, double tolerance);
+RcppExport SEXP _hexify_cpp_cell_solid_angle(SEXP icosaSEXP, SEXP cell_idSEXP, SEXP resolutionSEXP, SEXP apertureSEXP, SEXP ap_seqSEXP, SEXP toleranceSEXP) {
+BEGIN_RCPP
+    Rcpp::RObject rcpp_result_gen;
+    Rcpp::RNGScope rcpp_rngScope_gen;
+    Rcpp::traits::input_parameter< NumericVector >::type icosa(icosaSEXP);
     Rcpp::traits::input_parameter< NumericVector >::type cell_id(cell_idSEXP);
     Rcpp::traits::input_parameter< int >::type resolution(resolutionSEXP);
     Rcpp::traits::input_parameter< int >::type aperture(apertureSEXP);
-    rcpp_result_gen = Rcpp::wrap(cpp_cell_to_polygon(cell_id, resolution, aperture));
+    Rcpp::traits::input_parameter< IntegerVector >::type ap_seq(ap_seqSEXP);
+    Rcpp::traits::input_parameter< double >::type tolerance(toleranceSEXP);
+    rcpp_result_gen = Rcpp::wrap(cpp_cell_solid_angle(icosa, cell_id, resolution, aperture, ap_seq, tolerance));
     return rcpp_result_gen;
 END_RCPP
 }
-// cpp_ap_seq_edge_dim
-double cpp_ap_seq_edge_dim(IntegerVector ap_seq_in);
-RcppExport SEXP _hexify_cpp_ap_seq_edge_dim(SEXP ap_seq_inSEXP) {
+// cpp_cell_overlap_solid_angles
+List cpp_cell_overlap_solid_angles(NumericVector icosa, NumericVector cell_id, int resolution, int aperture, IntegerVector ap_seq, NumericVector parent_id, int parent_resolution, int parent_aperture, IntegerVector parent_ap_seq, IntegerVector pair_cell, IntegerVector pair_parent);
+RcppExport SEXP _hexify_cpp_cell_overlap_solid_angles(SEXP icosaSEXP, SEXP cell_idSEXP, SEXP resolutionSEXP, SEXP apertureSEXP, SEXP ap_seqSEXP, SEXP parent_idSEXP, SEXP parent_resolutionSEXP, SEXP parent_apertureSEXP, SEXP parent_ap_seqSEXP, SEXP pair_cellSEXP, SEXP pair_parentSEXP) {
 BEGIN_RCPP
     Rcpp::RObject rcpp_result_gen;
     Rcpp::RNGScope rcpp_rngScope_gen;
-    Rcpp::traits::input_parameter< IntegerVector >::type ap_seq_in(ap_seq_inSEXP);
-    rcpp_result_gen = Rcpp::wrap(cpp_ap_seq_edge_dim(ap_seq_in));
+    Rcpp::traits::input_parameter< NumericVector >::type icosa(icosaSEXP);
+    Rcpp::traits::input_parameter< NumericVector >::type cell_id(cell_idSEXP);
+    Rcpp::traits::input_parameter< int >::type resolution(resolutionSEXP);
+    Rcpp::traits::input_parameter< int >::type aperture(apertureSEXP);
+    Rcpp::traits::input_parameter< IntegerVector >::type ap_seq(ap_seqSEXP);
+    Rcpp::traits::input_parameter< NumericVector >::type parent_id(parent_idSEXP);
+    Rcpp::traits::input_parameter< int >::type parent_resolution(parent_resolutionSEXP);
+    Rcpp::traits::input_parameter< int >::type parent_aperture(parent_apertureSEXP);
+    Rcpp::traits::input_parameter< IntegerVector >::type parent_ap_seq(parent_ap_seqSEXP);
+    Rcpp::traits::input_parameter< IntegerVector >::type pair_cell(pair_cellSEXP);
+    Rcpp::traits::input_parameter< IntegerVector >::type pair_parent(pair_parentSEXP);
+    rcpp_result_gen = Rcpp::wrap(cpp_cell_overlap_solid_angles(icosa, cell_id, resolution, aperture, ap_seq, parent_id, parent_resolution, parent_aperture, parent_ap_seq, pair_cell, pair_parent));
     return rcpp_result_gen;
 END_RCPP
 }
-// cpp_lonlat_to_cell_seq
-NumericVector cpp_lonlat_to_cell_seq(NumericVector lon, NumericVector lat, IntegerVector ap_seq_in);
-RcppExport SEXP _hexify_cpp_lonlat_to_cell_seq(SEXP lonSEXP, SEXP latSEXP, SEXP ap_seq_inSEXP) {
+// cpp_cell_surface_paths
+NumericMatrix cpp_cell_surface_paths(NumericVector icosa, NumericVector cell_id, int resolution, int aperture, IntegerVector ap_seq, double step);
+RcppExport SEXP _hexify_cpp_cell_surface_paths(SEXP icosaSEXP, SEXP cell_idSEXP, SEXP resolutionSEXP, SEXP apertureSEXP, SEXP ap_seqSEXP, SEXP stepSEXP) {
 BEGIN_RCPP
     Rcpp::RObject rcpp_result_gen;
     Rcpp::RNGScope rcpp_rngScope_gen;
+    Rcpp::traits::input_parameter< NumericVector >::type icosa(icosaSEXP);
+    Rcpp::traits::input_parameter< NumericVector >::type cell_id(cell_idSEXP);
+    Rcpp::traits::input_parameter< int >::type resolution(resolutionSEXP);
+    Rcpp::traits::input_parameter< int >::type aperture(apertureSEXP);
+    Rcpp::traits::input_parameter< IntegerVector >::type ap_seq(ap_seqSEXP);
+    Rcpp::traits::input_parameter< double >::type step(stepSEXP);
+    rcpp_result_gen = Rcpp::wrap(cpp_cell_surface_paths(icosa, cell_id, resolution, aperture, ap_seq, step));
+    return rcpp_result_gen;
+END_RCPP
+}
+// cpp_icosa_solid
+List cpp_icosa_solid(NumericVector icosa);
+RcppExport SEXP _hexify_cpp_icosa_solid(SEXP icosaSEXP) {
+BEGIN_RCPP
+    Rcpp::RObject rcpp_result_gen;
+    Rcpp::RNGScope rcpp_rngScope_gen;
+    Rcpp::traits::input_parameter< NumericVector >::type icosa(icosaSEXP);
+    rcpp_result_gen = Rcpp::wrap(cpp_icosa_solid(icosa));
+    return rcpp_result_gen;
+END_RCPP
+}
+// cpp_lonlat_to_face_solid
+NumericMatrix cpp_lonlat_to_face_solid(NumericVector icosa, int face, NumericVector lon, NumericVector lat);
+RcppExport SEXP _hexify_cpp_lonlat_to_face_solid(SEXP icosaSEXP, SEXP faceSEXP, SEXP lonSEXP, SEXP latSEXP) {
+BEGIN_RCPP
+    Rcpp::RObject rcpp_result_gen;
+    Rcpp::RNGScope rcpp_rngScope_gen;
+    Rcpp::traits::input_parameter< NumericVector >::type icosa(icosaSEXP);
+    Rcpp::traits::input_parameter< int >::type face(faceSEXP);
     Rcpp::traits::input_parameter< NumericVector >::type lon(lonSEXP);
     Rcpp::traits::input_parameter< NumericVector >::type lat(latSEXP);
-    Rcpp::traits::input_parameter< IntegerVector >::type ap_seq_in(ap_seq_inSEXP);
-    rcpp_result_gen = Rcpp::wrap(cpp_lonlat_to_cell_seq(lon, lat, ap_seq_in));
+    rcpp_result_gen = Rcpp::wrap(cpp_lonlat_to_face_solid(icosa, face, lon, lat));
     return rcpp_result_gen;
 END_RCPP
 }
-// cpp_cell_to_lonlat_seq
-DataFrame cpp_cell_to_lonlat_seq(NumericVector cell_id, IntegerVector ap_seq_in);
-RcppExport SEXP _hexify_cpp_cell_to_lonlat_seq(SEXP cell_idSEXP, SEXP ap_seq_inSEXP) {
+// cpp_face_tri_to_solid
+NumericMatrix cpp_face_tri_to_solid(NumericVector icosa, int face, NumericVector tx, NumericVector ty);
+RcppExport SEXP _hexify_cpp_face_tri_to_solid(SEXP icosaSEXP, SEXP faceSEXP, SEXP txSEXP, SEXP tySEXP) {
 BEGIN_RCPP
     Rcpp::RObject rcpp_result_gen;
     Rcpp::RNGScope rcpp_rngScope_gen;
-    Rcpp::traits::input_parameter< NumericVector >::type cell_id(cell_idSEXP);
-    Rcpp::traits::input_parameter< IntegerVector >::type ap_seq_in(ap_seq_inSEXP);
-    rcpp_result_gen = Rcpp::wrap(cpp_cell_to_lonlat_seq(cell_id, ap_seq_in));
+    Rcpp::traits::input_parameter< NumericVector >::type icosa(icosaSEXP);
+    Rcpp::traits::input_parameter< int >::type face(faceSEXP);
+    Rcpp::traits::input_parameter< NumericVector >::type tx(txSEXP);
+    Rcpp::traits::input_parameter< NumericVector >::type ty(tySEXP);
+    rcpp_result_gen = Rcpp::wrap(cpp_face_tri_to_solid(icosa, face, tx, ty));
     return rcpp_result_gen;
 END_RCPP
 }
-// cpp_cell_to_quad_ij_seq
-DataFrame cpp_cell_to_quad_ij_seq(NumericVector cell_id, IntegerVector ap_seq_in);
-RcppExport SEXP _hexify_cpp_cell_to_quad_ij_seq(SEXP cell_idSEXP, SEXP ap_seq_inSEXP) {
+// cpp_globe_frame
+List cpp_globe_frame(NumericVector icosa, int resolution, int aperture, IntegerVector ap_seq);
+RcppExport SEXP _hexify_cpp_globe_frame(SEXP icosaSEXP, SEXP resolutionSEXP, SEXP apertureSEXP, SEXP ap_seqSEXP) {
 BEGIN_RCPP
     Rcpp::RObject rcpp_result_gen;
     Rcpp::RNGScope rcpp_rngScope_gen;
-    Rcpp::traits::input_parameter< NumericVector >::type cell_id(cell_idSEXP);
-    Rcpp::traits::input_parameter< IntegerVector >::type ap_seq_in(ap_seq_inSEXP);
-    rcpp_result_gen = Rcpp::wrap(cpp_cell_to_quad_ij_seq(cell_id, ap_seq_in));
-    return rcpp_result_gen;
-END_RCPP
-}
-// cpp_quad_ij_to_cell_seq
-NumericVector cpp_quad_ij_to_cell_seq(IntegerVector quad, NumericVector i, NumericVector j, IntegerVector ap_seq_in);
-RcppExport SEXP _hexify_cpp_quad_ij_to_cell_seq(SEXP quadSEXP, SEXP iSEXP, SEXP jSEXP, SEXP ap_seq_inSEXP) {
-BEGIN_RCPP
-    Rcpp::RObject rcpp_result_gen;
-    Rcpp::RNGScope rcpp_rngScope_gen;
-    Rcpp::traits::input_parameter< IntegerVector >::type quad(quadSEXP);
-    Rcpp::traits::input_parameter< NumericVector >::type i(iSEXP);
-    Rcpp::traits::input_parameter< NumericVector >::type j(jSEXP);
-    Rcpp::traits::input_parameter< IntegerVector >::type ap_seq_in(ap_seq_inSEXP);
-    rcpp_result_gen = Rcpp::wrap(cpp_quad_ij_to_cell_seq(quad, i, j, ap_seq_in));
-    return rcpp_result_gen;
-END_RCPP
-}
-// cpp_cell_to_corners_seq
-List cpp_cell_to_corners_seq(NumericVector cell_id, IntegerVector ap_seq_in);
-RcppExport SEXP _hexify_cpp_cell_to_corners_seq(SEXP cell_idSEXP, SEXP ap_seq_inSEXP) {
-BEGIN_RCPP
-    Rcpp::RObject rcpp_result_gen;
-    Rcpp::RNGScope rcpp_rngScope_gen;
-    Rcpp::traits::input_parameter< NumericVector >::type cell_id(cell_idSEXP);
-    Rcpp::traits::input_parameter< IntegerVector >::type ap_seq_in(ap_seq_inSEXP);
-    rcpp_result_gen = Rcpp::wrap(cpp_cell_to_corners_seq(cell_id, ap_seq_in));
-    return rcpp_result_gen;
-END_RCPP
-}
-// cpp_cell_to_polygon_seq
-DataFrame cpp_cell_to_polygon_seq(NumericVector cell_id, IntegerVector ap_seq_in);
-RcppExport SEXP _hexify_cpp_cell_to_polygon_seq(SEXP cell_idSEXP, SEXP ap_seq_inSEXP) {
-BEGIN_RCPP
-    Rcpp::RObject rcpp_result_gen;
-    Rcpp::RNGScope rcpp_rngScope_gen;
-    Rcpp::traits::input_parameter< NumericVector >::type cell_id(cell_idSEXP);
-    Rcpp::traits::input_parameter< IntegerVector >::type ap_seq_in(ap_seq_inSEXP);
-    rcpp_result_gen = Rcpp::wrap(cpp_cell_to_polygon_seq(cell_id, ap_seq_in));
+    Rcpp::traits::input_parameter< NumericVector >::type icosa(icosaSEXP);
+    Rcpp::traits::input_parameter< int >::type resolution(resolutionSEXP);
+    Rcpp::traits::input_parameter< int >::type aperture(apertureSEXP);
+    Rcpp::traits::input_parameter< IntegerVector >::type ap_seq(ap_seqSEXP);
+    rcpp_result_gen = Rcpp::wrap(cpp_globe_frame(icosa, resolution, aperture, ap_seq));
     return rcpp_result_gen;
 END_RCPP
 }
 // cpp_get_neighbors_isea
-Rcpp::List cpp_get_neighbors_isea(Rcpp::NumericVector cell_id, int resolution, int aperture);
-RcppExport SEXP _hexify_cpp_get_neighbors_isea(SEXP cell_idSEXP, SEXP resolutionSEXP, SEXP apertureSEXP) {
+Rcpp::List cpp_get_neighbors_isea(NumericVector icosa, Rcpp::NumericVector cell_id, int resolution, int aperture, IntegerVector ap_seq);
+RcppExport SEXP _hexify_cpp_get_neighbors_isea(SEXP icosaSEXP, SEXP cell_idSEXP, SEXP resolutionSEXP, SEXP apertureSEXP, SEXP ap_seqSEXP) {
 BEGIN_RCPP
     Rcpp::RObject rcpp_result_gen;
     Rcpp::RNGScope rcpp_rngScope_gen;
+    Rcpp::traits::input_parameter< NumericVector >::type icosa(icosaSEXP);
     Rcpp::traits::input_parameter< Rcpp::NumericVector >::type cell_id(cell_idSEXP);
     Rcpp::traits::input_parameter< int >::type resolution(resolutionSEXP);
     Rcpp::traits::input_parameter< int >::type aperture(apertureSEXP);
-    rcpp_result_gen = Rcpp::wrap(cpp_get_neighbors_isea(cell_id, resolution, aperture));
+    Rcpp::traits::input_parameter< IntegerVector >::type ap_seq(ap_seqSEXP);
+    rcpp_result_gen = Rcpp::wrap(cpp_get_neighbors_isea(icosa, cell_id, resolution, aperture, ap_seq));
     return rcpp_result_gen;
 END_RCPP
 }
-// cpp_get_neighbors_z7
-Rcpp::List cpp_get_neighbors_z7(Rcpp::CharacterVector index_ids, int resolution);
-RcppExport SEXP _hexify_cpp_get_neighbors_z7(SEXP index_idsSEXP, SEXP resolutionSEXP) {
+// cpp_get_neighbors_isea_lonlat
+Rcpp::List cpp_get_neighbors_isea_lonlat(NumericVector icosa, Rcpp::NumericVector cell_id, int resolution, int aperture, IntegerVector ap_seq);
+RcppExport SEXP _hexify_cpp_get_neighbors_isea_lonlat(SEXP icosaSEXP, SEXP cell_idSEXP, SEXP resolutionSEXP, SEXP apertureSEXP, SEXP ap_seqSEXP) {
 BEGIN_RCPP
     Rcpp::RObject rcpp_result_gen;
     Rcpp::RNGScope rcpp_rngScope_gen;
-    Rcpp::traits::input_parameter< Rcpp::CharacterVector >::type index_ids(index_idsSEXP);
+    Rcpp::traits::input_parameter< NumericVector >::type icosa(icosaSEXP);
+    Rcpp::traits::input_parameter< Rcpp::NumericVector >::type cell_id(cell_idSEXP);
     Rcpp::traits::input_parameter< int >::type resolution(resolutionSEXP);
-    rcpp_result_gen = Rcpp::wrap(cpp_get_neighbors_z7(index_ids, resolution));
+    Rcpp::traits::input_parameter< int >::type aperture(apertureSEXP);
+    Rcpp::traits::input_parameter< IntegerVector >::type ap_seq(ap_seqSEXP);
+    rcpp_result_gen = Rcpp::wrap(cpp_get_neighbors_isea_lonlat(icosa, cell_id, resolution, aperture, ap_seq));
+    return rcpp_result_gen;
+END_RCPP
+}
+// cpp_cell_walls
+List cpp_cell_walls(NumericVector icosa, NumericVector cell_id, int resolution, int aperture, IntegerVector ap_seq, double tolerance, bool walls);
+RcppExport SEXP _hexify_cpp_cell_walls(SEXP icosaSEXP, SEXP cell_idSEXP, SEXP resolutionSEXP, SEXP apertureSEXP, SEXP ap_seqSEXP, SEXP toleranceSEXP, SEXP wallsSEXP) {
+BEGIN_RCPP
+    Rcpp::RObject rcpp_result_gen;
+    Rcpp::RNGScope rcpp_rngScope_gen;
+    Rcpp::traits::input_parameter< NumericVector >::type icosa(icosaSEXP);
+    Rcpp::traits::input_parameter< NumericVector >::type cell_id(cell_idSEXP);
+    Rcpp::traits::input_parameter< int >::type resolution(resolutionSEXP);
+    Rcpp::traits::input_parameter< int >::type aperture(apertureSEXP);
+    Rcpp::traits::input_parameter< IntegerVector >::type ap_seq(ap_seqSEXP);
+    Rcpp::traits::input_parameter< double >::type tolerance(toleranceSEXP);
+    Rcpp::traits::input_parameter< bool >::type walls(wallsSEXP);
+    rcpp_result_gen = Rcpp::wrap(cpp_cell_walls(icosa, cell_id, resolution, aperture, ap_seq, tolerance, walls));
+    return rcpp_result_gen;
+END_RCPP
+}
+// cpp_ring_walls
+DataFrame cpp_ring_walls(List rings, NumericMatrix centres, List neighbour_centres);
+RcppExport SEXP _hexify_cpp_ring_walls(SEXP ringsSEXP, SEXP centresSEXP, SEXP neighbour_centresSEXP) {
+BEGIN_RCPP
+    Rcpp::RObject rcpp_result_gen;
+    Rcpp::RNGScope rcpp_rngScope_gen;
+    Rcpp::traits::input_parameter< List >::type rings(ringsSEXP);
+    Rcpp::traits::input_parameter< NumericMatrix >::type centres(centresSEXP);
+    Rcpp::traits::input_parameter< List >::type neighbour_centres(neighbour_centresSEXP);
+    rcpp_result_gen = Rcpp::wrap(cpp_ring_walls(rings, centres, neighbour_centres));
     return rcpp_result_gen;
 END_RCPP
 }
 // cpp_icosa_tri_to_plane
-DataFrame cpp_icosa_tri_to_plane(IntegerVector icosa_triangle_face, NumericVector icosa_triangle_x, NumericVector icosa_triangle_y);
-RcppExport SEXP _hexify_cpp_icosa_tri_to_plane(SEXP icosa_triangle_faceSEXP, SEXP icosa_triangle_xSEXP, SEXP icosa_triangle_ySEXP) {
+DataFrame cpp_icosa_tri_to_plane(NumericVector icosa, IntegerVector icosa_triangle_face, NumericVector icosa_triangle_x, NumericVector icosa_triangle_y);
+RcppExport SEXP _hexify_cpp_icosa_tri_to_plane(SEXP icosaSEXP, SEXP icosa_triangle_faceSEXP, SEXP icosa_triangle_xSEXP, SEXP icosa_triangle_ySEXP) {
 BEGIN_RCPP
     Rcpp::RObject rcpp_result_gen;
     Rcpp::RNGScope rcpp_rngScope_gen;
+    Rcpp::traits::input_parameter< NumericVector >::type icosa(icosaSEXP);
     Rcpp::traits::input_parameter< IntegerVector >::type icosa_triangle_face(icosa_triangle_faceSEXP);
     Rcpp::traits::input_parameter< NumericVector >::type icosa_triangle_x(icosa_triangle_xSEXP);
     Rcpp::traits::input_parameter< NumericVector >::type icosa_triangle_y(icosa_triangle_ySEXP);
-    rcpp_result_gen = Rcpp::wrap(cpp_icosa_tri_to_plane(icosa_triangle_face, icosa_triangle_x, icosa_triangle_y));
+    rcpp_result_gen = Rcpp::wrap(cpp_icosa_tri_to_plane(icosa, icosa_triangle_face, icosa_triangle_x, icosa_triangle_y));
     return rcpp_result_gen;
 END_RCPP
 }
 // cpp_cell_to_plane
-DataFrame cpp_cell_to_plane(NumericVector cell_id, int resolution, int aperture);
-RcppExport SEXP _hexify_cpp_cell_to_plane(SEXP cell_idSEXP, SEXP resolutionSEXP, SEXP apertureSEXP) {
+DataFrame cpp_cell_to_plane(NumericVector icosa, NumericVector cell_id, int resolution, int aperture);
+RcppExport SEXP _hexify_cpp_cell_to_plane(SEXP icosaSEXP, SEXP cell_idSEXP, SEXP resolutionSEXP, SEXP apertureSEXP) {
 BEGIN_RCPP
     Rcpp::RObject rcpp_result_gen;
     Rcpp::RNGScope rcpp_rngScope_gen;
+    Rcpp::traits::input_parameter< NumericVector >::type icosa(icosaSEXP);
     Rcpp::traits::input_parameter< NumericVector >::type cell_id(cell_idSEXP);
     Rcpp::traits::input_parameter< int >::type resolution(resolutionSEXP);
     Rcpp::traits::input_parameter< int >::type aperture(apertureSEXP);
-    rcpp_result_gen = Rcpp::wrap(cpp_cell_to_plane(cell_id, resolution, aperture));
+    rcpp_result_gen = Rcpp::wrap(cpp_cell_to_plane(icosa, cell_id, resolution, aperture));
     return rcpp_result_gen;
 END_RCPP
 }
 // cpp_lonlat_to_plane
-DataFrame cpp_lonlat_to_plane(NumericVector lon, NumericVector lat);
-RcppExport SEXP _hexify_cpp_lonlat_to_plane(SEXP lonSEXP, SEXP latSEXP) {
+DataFrame cpp_lonlat_to_plane(NumericVector icosa, NumericVector lon, NumericVector lat);
+RcppExport SEXP _hexify_cpp_lonlat_to_plane(SEXP icosaSEXP, SEXP lonSEXP, SEXP latSEXP) {
 BEGIN_RCPP
     Rcpp::RObject rcpp_result_gen;
     Rcpp::RNGScope rcpp_rngScope_gen;
+    Rcpp::traits::input_parameter< NumericVector >::type icosa(icosaSEXP);
     Rcpp::traits::input_parameter< NumericVector >::type lon(lonSEXP);
     Rcpp::traits::input_parameter< NumericVector >::type lat(latSEXP);
-    rcpp_result_gen = Rcpp::wrap(cpp_lonlat_to_plane(lon, lat));
+    rcpp_result_gen = Rcpp::wrap(cpp_lonlat_to_plane(icosa, lon, lat));
     return rcpp_result_gen;
 END_RCPP
 }
@@ -925,42 +1239,149 @@ BEGIN_RCPP
     return rcpp_result_gen;
 END_RCPP
 }
-// cpp_cell_to_index
-std::string cpp_cell_to_index(int face, double i, double j, int resolution, int aperture, std::string index_type);
-RcppExport SEXP _hexify_cpp_cell_to_index(SEXP faceSEXP, SEXP iSEXP, SEXP jSEXP, SEXP resolutionSEXP, SEXP apertureSEXP, SEXP index_typeSEXP) {
+// cpp_h3_cell_walls
+Rcpp::List cpp_h3_cell_walls(Rcpp::CharacterVector cell_ids, bool walls);
+RcppExport SEXP _hexify_cpp_h3_cell_walls(SEXP cell_idsSEXP, SEXP wallsSEXP) {
 BEGIN_RCPP
     Rcpp::RObject rcpp_result_gen;
     Rcpp::RNGScope rcpp_rngScope_gen;
-    Rcpp::traits::input_parameter< int >::type face(faceSEXP);
-    Rcpp::traits::input_parameter< double >::type i(iSEXP);
-    Rcpp::traits::input_parameter< double >::type j(jSEXP);
+    Rcpp::traits::input_parameter< Rcpp::CharacterVector >::type cell_ids(cell_idsSEXP);
+    Rcpp::traits::input_parameter< bool >::type walls(wallsSEXP);
+    rcpp_result_gen = Rcpp::wrap(cpp_h3_cell_walls(cell_ids, walls));
+    return rcpp_result_gen;
+END_RCPP
+}
+// cpp_h3_overlap_solid_angles
+Rcpp::List cpp_h3_overlap_solid_angles(Rcpp::CharacterVector cell_ids, Rcpp::CharacterVector parent_ids, Rcpp::IntegerVector pair_cell, Rcpp::IntegerVector pair_parent);
+RcppExport SEXP _hexify_cpp_h3_overlap_solid_angles(SEXP cell_idsSEXP, SEXP parent_idsSEXP, SEXP pair_cellSEXP, SEXP pair_parentSEXP) {
+BEGIN_RCPP
+    Rcpp::RObject rcpp_result_gen;
+    Rcpp::RNGScope rcpp_rngScope_gen;
+    Rcpp::traits::input_parameter< Rcpp::CharacterVector >::type cell_ids(cell_idsSEXP);
+    Rcpp::traits::input_parameter< Rcpp::CharacterVector >::type parent_ids(parent_idsSEXP);
+    Rcpp::traits::input_parameter< Rcpp::IntegerVector >::type pair_cell(pair_cellSEXP);
+    Rcpp::traits::input_parameter< Rcpp::IntegerVector >::type pair_parent(pair_parentSEXP);
+    rcpp_result_gen = Rcpp::wrap(cpp_h3_overlap_solid_angles(cell_ids, parent_ids, pair_cell, pair_parent));
+    return rcpp_result_gen;
+END_RCPP
+}
+// cpp_hex9_ancestor
+NumericVector cpp_hex9_ancestor(NumericVector cell_id, int resolution, int levels);
+RcppExport SEXP _hexify_cpp_hex9_ancestor(SEXP cell_idSEXP, SEXP resolutionSEXP, SEXP levelsSEXP) {
+BEGIN_RCPP
+    Rcpp::RObject rcpp_result_gen;
+    Rcpp::RNGScope rcpp_rngScope_gen;
+    Rcpp::traits::input_parameter< NumericVector >::type cell_id(cell_idSEXP);
+    Rcpp::traits::input_parameter< int >::type resolution(resolutionSEXP);
+    Rcpp::traits::input_parameter< int >::type levels(levelsSEXP);
+    rcpp_result_gen = Rcpp::wrap(cpp_hex9_ancestor(cell_id, resolution, levels));
+    return rcpp_result_gen;
+END_RCPP
+}
+// cpp_hex9_children
+List cpp_hex9_children(NumericVector cell_id, int resolution);
+RcppExport SEXP _hexify_cpp_hex9_children(SEXP cell_idSEXP, SEXP resolutionSEXP) {
+BEGIN_RCPP
+    Rcpp::RObject rcpp_result_gen;
+    Rcpp::RNGScope rcpp_rngScope_gen;
+    Rcpp::traits::input_parameter< NumericVector >::type cell_id(cell_idSEXP);
+    Rcpp::traits::input_parameter< int >::type resolution(resolutionSEXP);
+    rcpp_result_gen = Rcpp::wrap(cpp_hex9_children(cell_id, resolution));
+    return rcpp_result_gen;
+END_RCPP
+}
+// cpp_hex9_octahedron_cell
+NumericVector cpp_hex9_octahedron_cell(NumericVector x, NumericVector y, NumericVector z, int resolution);
+RcppExport SEXP _hexify_cpp_hex9_octahedron_cell(SEXP xSEXP, SEXP ySEXP, SEXP zSEXP, SEXP resolutionSEXP) {
+BEGIN_RCPP
+    Rcpp::RObject rcpp_result_gen;
+    Rcpp::RNGScope rcpp_rngScope_gen;
+    Rcpp::traits::input_parameter< NumericVector >::type x(xSEXP);
+    Rcpp::traits::input_parameter< NumericVector >::type y(ySEXP);
+    Rcpp::traits::input_parameter< NumericVector >::type z(zSEXP);
+    Rcpp::traits::input_parameter< int >::type resolution(resolutionSEXP);
+    rcpp_result_gen = Rcpp::wrap(cpp_hex9_octahedron_cell(x, y, z, resolution));
+    return rcpp_result_gen;
+END_RCPP
+}
+// cpp_hex9_warp_load
+void cpp_hex9_warp_load(RawVector bytes);
+RcppExport SEXP _hexify_cpp_hex9_warp_load(SEXP bytesSEXP) {
+BEGIN_RCPP
+    Rcpp::RNGScope rcpp_rngScope_gen;
+    Rcpp::traits::input_parameter< RawVector >::type bytes(bytesSEXP);
+    cpp_hex9_warp_load(bytes);
+    return R_NilValue;
+END_RCPP
+}
+// cpp_hex9_warp_ready
+bool cpp_hex9_warp_ready();
+RcppExport SEXP _hexify_cpp_hex9_warp_ready() {
+BEGIN_RCPP
+    Rcpp::RObject rcpp_result_gen;
+    Rcpp::RNGScope rcpp_rngScope_gen;
+    rcpp_result_gen = Rcpp::wrap(cpp_hex9_warp_ready());
+    return rcpp_result_gen;
+END_RCPP
+}
+// cpp_hex9_warp_texture
+List cpp_hex9_warp_texture();
+RcppExport SEXP _hexify_cpp_hex9_warp_texture() {
+BEGIN_RCPP
+    Rcpp::RObject rcpp_result_gen;
+    Rcpp::RNGScope rcpp_rngScope_gen;
+    rcpp_result_gen = Rcpp::wrap(cpp_hex9_warp_texture());
+    return rcpp_result_gen;
+END_RCPP
+}
+// cpp_hex9_digit_strings_unique
+bool cpp_hex9_digit_strings_unique();
+RcppExport SEXP _hexify_cpp_hex9_digit_strings_unique() {
+BEGIN_RCPP
+    Rcpp::RObject rcpp_result_gen;
+    Rcpp::RNGScope rcpp_rngScope_gen;
+    rcpp_result_gen = Rcpp::wrap(cpp_hex9_digit_strings_unique());
+    return rcpp_result_gen;
+END_RCPP
+}
+// cpp_cell_to_index
+CharacterVector cpp_cell_to_index(NumericVector icosa, IntegerVector face, NumericVector i, NumericVector j, int resolution, int aperture, std::string index_type);
+RcppExport SEXP _hexify_cpp_cell_to_index(SEXP icosaSEXP, SEXP faceSEXP, SEXP iSEXP, SEXP jSEXP, SEXP resolutionSEXP, SEXP apertureSEXP, SEXP index_typeSEXP) {
+BEGIN_RCPP
+    Rcpp::RObject rcpp_result_gen;
+    Rcpp::RNGScope rcpp_rngScope_gen;
+    Rcpp::traits::input_parameter< NumericVector >::type icosa(icosaSEXP);
+    Rcpp::traits::input_parameter< IntegerVector >::type face(faceSEXP);
+    Rcpp::traits::input_parameter< NumericVector >::type i(iSEXP);
+    Rcpp::traits::input_parameter< NumericVector >::type j(jSEXP);
     Rcpp::traits::input_parameter< int >::type resolution(resolutionSEXP);
     Rcpp::traits::input_parameter< int >::type aperture(apertureSEXP);
     Rcpp::traits::input_parameter< std::string >::type index_type(index_typeSEXP);
-    rcpp_result_gen = Rcpp::wrap(cpp_cell_to_index(face, i, j, resolution, aperture, index_type));
+    rcpp_result_gen = Rcpp::wrap(cpp_cell_to_index(icosa, face, i, j, resolution, aperture, index_type));
     return rcpp_result_gen;
 END_RCPP
 }
 // cpp_index_to_cell
-Rcpp::List cpp_index_to_cell(std::string index, int aperture, std::string index_type);
-RcppExport SEXP _hexify_cpp_index_to_cell(SEXP indexSEXP, SEXP apertureSEXP, SEXP index_typeSEXP) {
+DataFrame cpp_index_to_cell(NumericVector icosa, CharacterVector index, int aperture, std::string index_type);
+RcppExport SEXP _hexify_cpp_index_to_cell(SEXP icosaSEXP, SEXP indexSEXP, SEXP apertureSEXP, SEXP index_typeSEXP) {
 BEGIN_RCPP
     Rcpp::RObject rcpp_result_gen;
     Rcpp::RNGScope rcpp_rngScope_gen;
-    Rcpp::traits::input_parameter< std::string >::type index(indexSEXP);
+    Rcpp::traits::input_parameter< NumericVector >::type icosa(icosaSEXP);
+    Rcpp::traits::input_parameter< CharacterVector >::type index(indexSEXP);
     Rcpp::traits::input_parameter< int >::type aperture(apertureSEXP);
     Rcpp::traits::input_parameter< std::string >::type index_type(index_typeSEXP);
-    rcpp_result_gen = Rcpp::wrap(cpp_index_to_cell(index, aperture, index_type));
+    rcpp_result_gen = Rcpp::wrap(cpp_index_to_cell(icosa, index, aperture, index_type));
     return rcpp_result_gen;
 END_RCPP
 }
 // cpp_get_parent_index
-std::string cpp_get_parent_index(std::string index, int aperture, std::string index_type);
+CharacterVector cpp_get_parent_index(CharacterVector index, int aperture, std::string index_type);
 RcppExport SEXP _hexify_cpp_get_parent_index(SEXP indexSEXP, SEXP apertureSEXP, SEXP index_typeSEXP) {
 BEGIN_RCPP
     Rcpp::RObject rcpp_result_gen;
     Rcpp::RNGScope rcpp_rngScope_gen;
-    Rcpp::traits::input_parameter< std::string >::type index(indexSEXP);
+    Rcpp::traits::input_parameter< CharacterVector >::type index(indexSEXP);
     Rcpp::traits::input_parameter< int >::type aperture(apertureSEXP);
     Rcpp::traits::input_parameter< std::string >::type index_type(index_typeSEXP);
     rcpp_result_gen = Rcpp::wrap(cpp_get_parent_index(index, aperture, index_type));
@@ -968,25 +1389,26 @@ BEGIN_RCPP
 END_RCPP
 }
 // cpp_get_children_indices
-Rcpp::StringVector cpp_get_children_indices(std::string index, int aperture, std::string index_type);
-RcppExport SEXP _hexify_cpp_get_children_indices(SEXP indexSEXP, SEXP apertureSEXP, SEXP index_typeSEXP) {
+List cpp_get_children_indices(NumericVector icosa, CharacterVector index, int aperture, std::string index_type);
+RcppExport SEXP _hexify_cpp_get_children_indices(SEXP icosaSEXP, SEXP indexSEXP, SEXP apertureSEXP, SEXP index_typeSEXP) {
 BEGIN_RCPP
     Rcpp::RObject rcpp_result_gen;
     Rcpp::RNGScope rcpp_rngScope_gen;
-    Rcpp::traits::input_parameter< std::string >::type index(indexSEXP);
+    Rcpp::traits::input_parameter< NumericVector >::type icosa(icosaSEXP);
+    Rcpp::traits::input_parameter< CharacterVector >::type index(indexSEXP);
     Rcpp::traits::input_parameter< int >::type aperture(apertureSEXP);
     Rcpp::traits::input_parameter< std::string >::type index_type(index_typeSEXP);
-    rcpp_result_gen = Rcpp::wrap(cpp_get_children_indices(index, aperture, index_type));
+    rcpp_result_gen = Rcpp::wrap(cpp_get_children_indices(icosa, index, aperture, index_type));
     return rcpp_result_gen;
 END_RCPP
 }
 // cpp_get_index_resolution
-int cpp_get_index_resolution(std::string index, int aperture, std::string index_type);
+IntegerVector cpp_get_index_resolution(CharacterVector index, int aperture, std::string index_type);
 RcppExport SEXP _hexify_cpp_get_index_resolution(SEXP indexSEXP, SEXP apertureSEXP, SEXP index_typeSEXP) {
 BEGIN_RCPP
     Rcpp::RObject rcpp_result_gen;
     Rcpp::RNGScope rcpp_rngScope_gen;
-    Rcpp::traits::input_parameter< std::string >::type index(indexSEXP);
+    Rcpp::traits::input_parameter< CharacterVector >::type index(indexSEXP);
     Rcpp::traits::input_parameter< int >::type aperture(apertureSEXP);
     Rcpp::traits::input_parameter< std::string >::type index_type(index_typeSEXP);
     rcpp_result_gen = Rcpp::wrap(cpp_get_index_resolution(index, aperture, index_type));
@@ -994,13 +1416,13 @@ BEGIN_RCPP
 END_RCPP
 }
 // cpp_compare_indices
-int cpp_compare_indices(std::string idx1, std::string idx2);
+IntegerVector cpp_compare_indices(CharacterVector idx1, CharacterVector idx2);
 RcppExport SEXP _hexify_cpp_compare_indices(SEXP idx1SEXP, SEXP idx2SEXP) {
 BEGIN_RCPP
     Rcpp::RObject rcpp_result_gen;
     Rcpp::RNGScope rcpp_rngScope_gen;
-    Rcpp::traits::input_parameter< std::string >::type idx1(idx1SEXP);
-    Rcpp::traits::input_parameter< std::string >::type idx2(idx2SEXP);
+    Rcpp::traits::input_parameter< CharacterVector >::type idx1(idx1SEXP);
+    Rcpp::traits::input_parameter< CharacterVector >::type idx2(idx2SEXP);
     rcpp_result_gen = Rcpp::wrap(cpp_compare_indices(idx1, idx2));
     return rcpp_result_gen;
 END_RCPP
@@ -1028,85 +1450,46 @@ BEGIN_RCPP
     return rcpp_result_gen;
 END_RCPP
 }
-// cpp_lonlat_to_index_ap3
-std::string cpp_lonlat_to_index_ap3(double lon_deg, double lat_deg, int resolution, std::string index_type);
-RcppExport SEXP _hexify_cpp_lonlat_to_index_ap3(SEXP lon_degSEXP, SEXP lat_degSEXP, SEXP resolutionSEXP, SEXP index_typeSEXP) {
-BEGIN_RCPP
-    Rcpp::RObject rcpp_result_gen;
-    Rcpp::RNGScope rcpp_rngScope_gen;
-    Rcpp::traits::input_parameter< double >::type lon_deg(lon_degSEXP);
-    Rcpp::traits::input_parameter< double >::type lat_deg(lat_degSEXP);
-    Rcpp::traits::input_parameter< int >::type resolution(resolutionSEXP);
-    Rcpp::traits::input_parameter< std::string >::type index_type(index_typeSEXP);
-    rcpp_result_gen = Rcpp::wrap(cpp_lonlat_to_index_ap3(lon_deg, lat_deg, resolution, index_type));
-    return rcpp_result_gen;
-END_RCPP
-}
-// cpp_lonlat_to_index_ap4
-std::string cpp_lonlat_to_index_ap4(double lon_deg, double lat_deg, int resolution, std::string index_type);
-RcppExport SEXP _hexify_cpp_lonlat_to_index_ap4(SEXP lon_degSEXP, SEXP lat_degSEXP, SEXP resolutionSEXP, SEXP index_typeSEXP) {
-BEGIN_RCPP
-    Rcpp::RObject rcpp_result_gen;
-    Rcpp::RNGScope rcpp_rngScope_gen;
-    Rcpp::traits::input_parameter< double >::type lon_deg(lon_degSEXP);
-    Rcpp::traits::input_parameter< double >::type lat_deg(lat_degSEXP);
-    Rcpp::traits::input_parameter< int >::type resolution(resolutionSEXP);
-    Rcpp::traits::input_parameter< std::string >::type index_type(index_typeSEXP);
-    rcpp_result_gen = Rcpp::wrap(cpp_lonlat_to_index_ap4(lon_deg, lat_deg, resolution, index_type));
-    return rcpp_result_gen;
-END_RCPP
-}
-// cpp_lonlat_to_index_ap7
-std::string cpp_lonlat_to_index_ap7(double lon_deg, double lat_deg, int resolution, std::string index_type);
-RcppExport SEXP _hexify_cpp_lonlat_to_index_ap7(SEXP lon_degSEXP, SEXP lat_degSEXP, SEXP resolutionSEXP, SEXP index_typeSEXP) {
-BEGIN_RCPP
-    Rcpp::RObject rcpp_result_gen;
-    Rcpp::RNGScope rcpp_rngScope_gen;
-    Rcpp::traits::input_parameter< double >::type lon_deg(lon_degSEXP);
-    Rcpp::traits::input_parameter< double >::type lat_deg(lat_degSEXP);
-    Rcpp::traits::input_parameter< int >::type resolution(resolutionSEXP);
-    Rcpp::traits::input_parameter< std::string >::type index_type(index_typeSEXP);
-    rcpp_result_gen = Rcpp::wrap(cpp_lonlat_to_index_ap7(lon_deg, lat_deg, resolution, index_type));
-    return rcpp_result_gen;
-END_RCPP
-}
 // cpp_lonlat_to_index
-std::string cpp_lonlat_to_index(double lon_deg, double lat_deg, int resolution, int aperture, std::string index_type);
-RcppExport SEXP _hexify_cpp_lonlat_to_index(SEXP lon_degSEXP, SEXP lat_degSEXP, SEXP resolutionSEXP, SEXP apertureSEXP, SEXP index_typeSEXP) {
+CharacterVector cpp_lonlat_to_index(NumericVector icosa, NumericVector lon_deg, NumericVector lat_deg, int resolution, int aperture, std::string index_type);
+RcppExport SEXP _hexify_cpp_lonlat_to_index(SEXP icosaSEXP, SEXP lon_degSEXP, SEXP lat_degSEXP, SEXP resolutionSEXP, SEXP apertureSEXP, SEXP index_typeSEXP) {
 BEGIN_RCPP
     Rcpp::RObject rcpp_result_gen;
     Rcpp::RNGScope rcpp_rngScope_gen;
-    Rcpp::traits::input_parameter< double >::type lon_deg(lon_degSEXP);
-    Rcpp::traits::input_parameter< double >::type lat_deg(lat_degSEXP);
+    Rcpp::traits::input_parameter< NumericVector >::type icosa(icosaSEXP);
+    Rcpp::traits::input_parameter< NumericVector >::type lon_deg(lon_degSEXP);
+    Rcpp::traits::input_parameter< NumericVector >::type lat_deg(lat_degSEXP);
     Rcpp::traits::input_parameter< int >::type resolution(resolutionSEXP);
     Rcpp::traits::input_parameter< int >::type aperture(apertureSEXP);
     Rcpp::traits::input_parameter< std::string >::type index_type(index_typeSEXP);
-    rcpp_result_gen = Rcpp::wrap(cpp_lonlat_to_index(lon_deg, lat_deg, resolution, aperture, index_type));
+    rcpp_result_gen = Rcpp::wrap(cpp_lonlat_to_index(icosa, lon_deg, lat_deg, resolution, aperture, index_type));
     return rcpp_result_gen;
 END_RCPP
 }
 // cpp_index_to_lonlat
-Rcpp::NumericVector cpp_index_to_lonlat(std::string index, int aperture, std::string index_type);
-RcppExport SEXP _hexify_cpp_index_to_lonlat(SEXP indexSEXP, SEXP apertureSEXP, SEXP index_typeSEXP) {
+DataFrame cpp_index_to_lonlat(NumericVector icosa, CharacterVector index, int aperture, std::string index_type);
+RcppExport SEXP _hexify_cpp_index_to_lonlat(SEXP icosaSEXP, SEXP indexSEXP, SEXP apertureSEXP, SEXP index_typeSEXP) {
 BEGIN_RCPP
     Rcpp::RObject rcpp_result_gen;
     Rcpp::RNGScope rcpp_rngScope_gen;
-    Rcpp::traits::input_parameter< std::string >::type index(indexSEXP);
+    Rcpp::traits::input_parameter< NumericVector >::type icosa(icosaSEXP);
+    Rcpp::traits::input_parameter< CharacterVector >::type index(indexSEXP);
     Rcpp::traits::input_parameter< int >::type aperture(apertureSEXP);
     Rcpp::traits::input_parameter< std::string >::type index_type(index_typeSEXP);
-    rcpp_result_gen = Rcpp::wrap(cpp_index_to_lonlat(index, aperture, index_type));
+    rcpp_result_gen = Rcpp::wrap(cpp_index_to_lonlat(icosa, index, aperture, index_type));
     return rcpp_result_gen;
 END_RCPP
 }
 // cpp_z7_canonical_form
-std::string cpp_z7_canonical_form(std::string index, int max_iterations);
-RcppExport SEXP _hexify_cpp_z7_canonical_form(SEXP indexSEXP, SEXP max_iterationsSEXP) {
+CharacterVector cpp_z7_canonical_form(NumericVector icosa, CharacterVector index, int max_iterations);
+RcppExport SEXP _hexify_cpp_z7_canonical_form(SEXP icosaSEXP, SEXP indexSEXP, SEXP max_iterationsSEXP) {
 BEGIN_RCPP
     Rcpp::RObject rcpp_result_gen;
     Rcpp::RNGScope rcpp_rngScope_gen;
-    Rcpp::traits::input_parameter< std::string >::type index(indexSEXP);
+    Rcpp::traits::input_parameter< NumericVector >::type icosa(icosaSEXP);
+    Rcpp::traits::input_parameter< CharacterVector >::type index(indexSEXP);
     Rcpp::traits::input_parameter< int >::type max_iterations(max_iterationsSEXP);
-    rcpp_result_gen = Rcpp::wrap(cpp_z7_canonical_form(index, max_iterations));
+    rcpp_result_gen = Rcpp::wrap(cpp_z7_canonical_form(icosa, index, max_iterations));
     return rcpp_result_gen;
 END_RCPP
 }
@@ -1122,141 +1505,221 @@ BEGIN_RCPP
     return R_NilValue;
 END_RCPP
 }
-// cpp_which_face
-int cpp_which_face(double lon_deg, double lat_deg);
-RcppExport SEXP _hexify_cpp_which_face(SEXP lon_degSEXP, SEXP lat_degSEXP) {
+// cpp_solid_info
+List cpp_solid_info(NumericVector icosa);
+RcppExport SEXP _hexify_cpp_solid_info(SEXP icosaSEXP) {
 BEGIN_RCPP
     Rcpp::RObject rcpp_result_gen;
     Rcpp::RNGScope rcpp_rngScope_gen;
+    Rcpp::traits::input_parameter< NumericVector >::type icosa(icosaSEXP);
+    rcpp_result_gen = Rcpp::wrap(cpp_solid_info(icosa));
+    return rcpp_result_gen;
+END_RCPP
+}
+// cpp_which_face
+int cpp_which_face(NumericVector icosa, double lon_deg, double lat_deg);
+RcppExport SEXP _hexify_cpp_which_face(SEXP icosaSEXP, SEXP lon_degSEXP, SEXP lat_degSEXP) {
+BEGIN_RCPP
+    Rcpp::RObject rcpp_result_gen;
+    Rcpp::RNGScope rcpp_rngScope_gen;
+    Rcpp::traits::input_parameter< NumericVector >::type icosa(icosaSEXP);
     Rcpp::traits::input_parameter< double >::type lon_deg(lon_degSEXP);
     Rcpp::traits::input_parameter< double >::type lat_deg(lat_degSEXP);
-    rcpp_result_gen = Rcpp::wrap(cpp_which_face(lon_deg, lat_deg));
+    rcpp_result_gen = Rcpp::wrap(cpp_which_face(icosa, lon_deg, lat_deg));
     return rcpp_result_gen;
 END_RCPP
 }
 // cpp_face_centers
-DataFrame cpp_face_centers();
-RcppExport SEXP _hexify_cpp_face_centers() {
+DataFrame cpp_face_centers(NumericVector icosa);
+RcppExport SEXP _hexify_cpp_face_centers(SEXP icosaSEXP) {
 BEGIN_RCPP
     Rcpp::RObject rcpp_result_gen;
     Rcpp::RNGScope rcpp_rngScope_gen;
-    rcpp_result_gen = Rcpp::wrap(cpp_face_centers());
+    Rcpp::traits::input_parameter< NumericVector >::type icosa(icosaSEXP);
+    rcpp_result_gen = Rcpp::wrap(cpp_face_centers(icosa));
     return rcpp_result_gen;
 END_RCPP
 }
-// cpp_snyder_forward
-NumericVector cpp_snyder_forward(double lon_deg, double lat_deg);
-RcppExport SEXP _hexify_cpp_snyder_forward(SEXP lon_degSEXP, SEXP lat_degSEXP) {
+// cpp_sphere_latitude
+NumericVector cpp_sphere_latitude(NumericVector icosa, NumericVector lat, bool inverse, bool exact);
+RcppExport SEXP _hexify_cpp_sphere_latitude(SEXP icosaSEXP, SEXP latSEXP, SEXP inverseSEXP, SEXP exactSEXP) {
 BEGIN_RCPP
     Rcpp::RObject rcpp_result_gen;
     Rcpp::RNGScope rcpp_rngScope_gen;
+    Rcpp::traits::input_parameter< NumericVector >::type icosa(icosaSEXP);
+    Rcpp::traits::input_parameter< NumericVector >::type lat(latSEXP);
+    Rcpp::traits::input_parameter< bool >::type inverse(inverseSEXP);
+    Rcpp::traits::input_parameter< bool >::type exact(exactSEXP);
+    rcpp_result_gen = Rcpp::wrap(cpp_sphere_latitude(icosa, lat, inverse, exact));
+    return rcpp_result_gen;
+END_RCPP
+}
+// cpp_authalic_radius_ratio
+double cpp_authalic_radius_ratio(double flattening);
+RcppExport SEXP _hexify_cpp_authalic_radius_ratio(SEXP flatteningSEXP) {
+BEGIN_RCPP
+    Rcpp::RObject rcpp_result_gen;
+    Rcpp::RNGScope rcpp_rngScope_gen;
+    Rcpp::traits::input_parameter< double >::type flattening(flatteningSEXP);
+    rcpp_result_gen = Rcpp::wrap(cpp_authalic_radius_ratio(flattening));
+    return rcpp_result_gen;
+END_RCPP
+}
+// cpp_icosa_forward
+NumericVector cpp_icosa_forward(NumericVector icosa, double lon_deg, double lat_deg);
+RcppExport SEXP _hexify_cpp_icosa_forward(SEXP icosaSEXP, SEXP lon_degSEXP, SEXP lat_degSEXP) {
+BEGIN_RCPP
+    Rcpp::RObject rcpp_result_gen;
+    Rcpp::RNGScope rcpp_rngScope_gen;
+    Rcpp::traits::input_parameter< NumericVector >::type icosa(icosaSEXP);
     Rcpp::traits::input_parameter< double >::type lon_deg(lon_degSEXP);
     Rcpp::traits::input_parameter< double >::type lat_deg(lat_degSEXP);
-    rcpp_result_gen = Rcpp::wrap(cpp_snyder_forward(lon_deg, lat_deg));
+    rcpp_result_gen = Rcpp::wrap(cpp_icosa_forward(icosa, lon_deg, lat_deg));
     return rcpp_result_gen;
 END_RCPP
 }
 // cpp_project_to_icosa_triangle
-NumericVector cpp_project_to_icosa_triangle(int face, double lon_deg, double lat_deg);
-RcppExport SEXP _hexify_cpp_project_to_icosa_triangle(SEXP faceSEXP, SEXP lon_degSEXP, SEXP lat_degSEXP) {
+NumericVector cpp_project_to_icosa_triangle(NumericVector icosa, int face, double lon_deg, double lat_deg);
+RcppExport SEXP _hexify_cpp_project_to_icosa_triangle(SEXP icosaSEXP, SEXP faceSEXP, SEXP lon_degSEXP, SEXP lat_degSEXP) {
 BEGIN_RCPP
     Rcpp::RObject rcpp_result_gen;
     Rcpp::RNGScope rcpp_rngScope_gen;
+    Rcpp::traits::input_parameter< NumericVector >::type icosa(icosaSEXP);
     Rcpp::traits::input_parameter< int >::type face(faceSEXP);
     Rcpp::traits::input_parameter< double >::type lon_deg(lon_degSEXP);
     Rcpp::traits::input_parameter< double >::type lat_deg(lat_degSEXP);
-    rcpp_result_gen = Rcpp::wrap(cpp_project_to_icosa_triangle(face, lon_deg, lat_deg));
-    return rcpp_result_gen;
-END_RCPP
-}
-// cpp_snyder_inv_set_precision
-void cpp_snyder_inv_set_precision(std::string mode, Rcpp::Nullable<double> tol, Rcpp::Nullable<int> max_iters);
-RcppExport SEXP _hexify_cpp_snyder_inv_set_precision(SEXP modeSEXP, SEXP tolSEXP, SEXP max_itersSEXP) {
-BEGIN_RCPP
-    Rcpp::RNGScope rcpp_rngScope_gen;
-    Rcpp::traits::input_parameter< std::string >::type mode(modeSEXP);
-    Rcpp::traits::input_parameter< Rcpp::Nullable<double> >::type tol(tolSEXP);
-    Rcpp::traits::input_parameter< Rcpp::Nullable<int> >::type max_iters(max_itersSEXP);
-    cpp_snyder_inv_set_precision(mode, tol, max_iters);
-    return R_NilValue;
-END_RCPP
-}
-// cpp_snyder_inv_get_precision
-Rcpp::NumericVector cpp_snyder_inv_get_precision();
-RcppExport SEXP _hexify_cpp_snyder_inv_get_precision() {
-BEGIN_RCPP
-    Rcpp::RObject rcpp_result_gen;
-    Rcpp::RNGScope rcpp_rngScope_gen;
-    rcpp_result_gen = Rcpp::wrap(cpp_snyder_inv_get_precision());
-    return rcpp_result_gen;
-END_RCPP
-}
-// cpp_snyder_inv_set_verbose
-void cpp_snyder_inv_set_verbose(bool v);
-RcppExport SEXP _hexify_cpp_snyder_inv_set_verbose(SEXP vSEXP) {
-BEGIN_RCPP
-    Rcpp::RNGScope rcpp_rngScope_gen;
-    Rcpp::traits::input_parameter< bool >::type v(vSEXP);
-    cpp_snyder_inv_set_verbose(v);
-    return R_NilValue;
-END_RCPP
-}
-// cpp_snyder_inv_get_stats_and_reset
-Rcpp::IntegerVector cpp_snyder_inv_get_stats_and_reset();
-RcppExport SEXP _hexify_cpp_snyder_inv_get_stats_and_reset() {
-BEGIN_RCPP
-    Rcpp::RObject rcpp_result_gen;
-    Rcpp::RNGScope rcpp_rngScope_gen;
-    rcpp_result_gen = Rcpp::wrap(cpp_snyder_inv_get_stats_and_reset());
+    rcpp_result_gen = Rcpp::wrap(cpp_project_to_icosa_triangle(icosa, face, lon_deg, lat_deg));
     return rcpp_result_gen;
 END_RCPP
 }
 // cpp_face_xy_to_ll
-Rcpp::NumericVector cpp_face_xy_to_ll(double x, double y, int face, Rcpp::Nullable<double> tol, Rcpp::Nullable<int> max_iters);
-RcppExport SEXP _hexify_cpp_face_xy_to_ll(SEXP xSEXP, SEXP ySEXP, SEXP faceSEXP, SEXP tolSEXP, SEXP max_itersSEXP) {
+Rcpp::NumericVector cpp_face_xy_to_ll(NumericVector icosa, double x, double y, int face, bool newton);
+RcppExport SEXP _hexify_cpp_face_xy_to_ll(SEXP icosaSEXP, SEXP xSEXP, SEXP ySEXP, SEXP faceSEXP, SEXP newtonSEXP) {
 BEGIN_RCPP
     Rcpp::RObject rcpp_result_gen;
     Rcpp::RNGScope rcpp_rngScope_gen;
+    Rcpp::traits::input_parameter< NumericVector >::type icosa(icosaSEXP);
     Rcpp::traits::input_parameter< double >::type x(xSEXP);
     Rcpp::traits::input_parameter< double >::type y(ySEXP);
     Rcpp::traits::input_parameter< int >::type face(faceSEXP);
-    Rcpp::traits::input_parameter< Rcpp::Nullable<double> >::type tol(tolSEXP);
-    Rcpp::traits::input_parameter< Rcpp::Nullable<int> >::type max_iters(max_itersSEXP);
-    rcpp_result_gen = Rcpp::wrap(cpp_face_xy_to_ll(x, y, face, tol, max_iters));
+    Rcpp::traits::input_parameter< bool >::type newton(newtonSEXP);
+    rcpp_result_gen = Rcpp::wrap(cpp_face_xy_to_ll(icosa, x, y, face, newton));
+    return rcpp_result_gen;
+END_RCPP
+}
+// cpp_snyder_triangle_forward
+NumericMatrix cpp_snyder_triangle_forward(NumericVector v0, NumericVector v1, NumericVector v2, NumericMatrix v);
+RcppExport SEXP _hexify_cpp_snyder_triangle_forward(SEXP v0SEXP, SEXP v1SEXP, SEXP v2SEXP, SEXP vSEXP) {
+BEGIN_RCPP
+    Rcpp::RObject rcpp_result_gen;
+    Rcpp::RNGScope rcpp_rngScope_gen;
+    Rcpp::traits::input_parameter< NumericVector >::type v0(v0SEXP);
+    Rcpp::traits::input_parameter< NumericVector >::type v1(v1SEXP);
+    Rcpp::traits::input_parameter< NumericVector >::type v2(v2SEXP);
+    Rcpp::traits::input_parameter< NumericMatrix >::type v(vSEXP);
+    rcpp_result_gen = Rcpp::wrap(cpp_snyder_triangle_forward(v0, v1, v2, v));
+    return rcpp_result_gen;
+END_RCPP
+}
+// cpp_snyder_triangle_inverse
+NumericMatrix cpp_snyder_triangle_inverse(NumericVector v0, NumericVector v1, NumericVector v2, NumericMatrix b);
+RcppExport SEXP _hexify_cpp_snyder_triangle_inverse(SEXP v0SEXP, SEXP v1SEXP, SEXP v2SEXP, SEXP bSEXP) {
+BEGIN_RCPP
+    Rcpp::RObject rcpp_result_gen;
+    Rcpp::RNGScope rcpp_rngScope_gen;
+    Rcpp::traits::input_parameter< NumericVector >::type v0(v0SEXP);
+    Rcpp::traits::input_parameter< NumericVector >::type v1(v1SEXP);
+    Rcpp::traits::input_parameter< NumericVector >::type v2(v2SEXP);
+    Rcpp::traits::input_parameter< NumericMatrix >::type b(bSEXP);
+    rcpp_result_gen = Rcpp::wrap(cpp_snyder_triangle_inverse(v0, v1, v2, b));
     return rcpp_result_gen;
 END_RCPP
 }
 // cpp_icosa_face_params
-Rcpp::NumericVector cpp_icosa_face_params(int face);
-RcppExport SEXP _hexify_cpp_icosa_face_params(SEXP faceSEXP) {
+Rcpp::NumericVector cpp_icosa_face_params(NumericVector icosa, int face);
+RcppExport SEXP _hexify_cpp_icosa_face_params(SEXP icosaSEXP, SEXP faceSEXP) {
 BEGIN_RCPP
     Rcpp::RObject rcpp_result_gen;
     Rcpp::RNGScope rcpp_rngScope_gen;
+    Rcpp::traits::input_parameter< NumericVector >::type icosa(icosaSEXP);
     Rcpp::traits::input_parameter< int >::type face(faceSEXP);
-    rcpp_result_gen = Rcpp::wrap(cpp_icosa_face_params(face));
+    rcpp_result_gen = Rcpp::wrap(cpp_icosa_face_params(icosa, face));
     return rcpp_result_gen;
 END_RCPP
 }
 // cpp_hex_index_face_to_lonlat
-Rcpp::NumericVector cpp_hex_index_face_to_lonlat(double x, double y, double cen_lat, double cen_lon, double face_azimuth_offset, bool degrees, Rcpp::Nullable<double> tol, Rcpp::Nullable<int> max_iters);
-RcppExport SEXP _hexify_cpp_hex_index_face_to_lonlat(SEXP xSEXP, SEXP ySEXP, SEXP cen_latSEXP, SEXP cen_lonSEXP, SEXP face_azimuth_offsetSEXP, SEXP degreesSEXP, SEXP tolSEXP, SEXP max_itersSEXP) {
+Rcpp::NumericVector cpp_hex_index_face_to_lonlat(NumericVector icosa, double x, double y, double cen_lat, double cen_lon, double face_azimuth_offset, bool degrees);
+RcppExport SEXP _hexify_cpp_hex_index_face_to_lonlat(SEXP icosaSEXP, SEXP xSEXP, SEXP ySEXP, SEXP cen_latSEXP, SEXP cen_lonSEXP, SEXP face_azimuth_offsetSEXP, SEXP degreesSEXP) {
 BEGIN_RCPP
     Rcpp::RObject rcpp_result_gen;
     Rcpp::RNGScope rcpp_rngScope_gen;
+    Rcpp::traits::input_parameter< NumericVector >::type icosa(icosaSEXP);
     Rcpp::traits::input_parameter< double >::type x(xSEXP);
     Rcpp::traits::input_parameter< double >::type y(ySEXP);
     Rcpp::traits::input_parameter< double >::type cen_lat(cen_latSEXP);
     Rcpp::traits::input_parameter< double >::type cen_lon(cen_lonSEXP);
     Rcpp::traits::input_parameter< double >::type face_azimuth_offset(face_azimuth_offsetSEXP);
     Rcpp::traits::input_parameter< bool >::type degrees(degreesSEXP);
-    Rcpp::traits::input_parameter< Rcpp::Nullable<double> >::type tol(tolSEXP);
-    Rcpp::traits::input_parameter< Rcpp::Nullable<int> >::type max_iters(max_itersSEXP);
-    rcpp_result_gen = Rcpp::wrap(cpp_hex_index_face_to_lonlat(x, y, cen_lat, cen_lon, face_azimuth_offset, degrees, tol, max_iters));
+    rcpp_result_gen = Rcpp::wrap(cpp_hex_index_face_to_lonlat(icosa, x, y, cen_lat, cen_lon, face_azimuth_offset, degrees));
+    return rcpp_result_gen;
+END_RCPP
+}
+// cpp_lonlat_tissot
+DataFrame cpp_lonlat_tissot(NumericVector icosa, NumericVector lon, NumericVector lat, IntegerVector face, int stage);
+RcppExport SEXP _hexify_cpp_lonlat_tissot(SEXP icosaSEXP, SEXP lonSEXP, SEXP latSEXP, SEXP faceSEXP, SEXP stageSEXP) {
+BEGIN_RCPP
+    Rcpp::RObject rcpp_result_gen;
+    Rcpp::RNGScope rcpp_rngScope_gen;
+    Rcpp::traits::input_parameter< NumericVector >::type icosa(icosaSEXP);
+    Rcpp::traits::input_parameter< NumericVector >::type lon(lonSEXP);
+    Rcpp::traits::input_parameter< NumericVector >::type lat(latSEXP);
+    Rcpp::traits::input_parameter< IntegerVector >::type face(faceSEXP);
+    Rcpp::traits::input_parameter< int >::type stage(stageSEXP);
+    rcpp_result_gen = Rcpp::wrap(cpp_lonlat_tissot(icosa, lon, lat, face, stage));
+    return rcpp_result_gen;
+END_RCPP
+}
+// cpp_face_tri_tissot
+DataFrame cpp_face_tri_tissot(NumericVector icosa, int face, NumericVector tx, NumericVector ty, int stage);
+RcppExport SEXP _hexify_cpp_face_tri_tissot(SEXP icosaSEXP, SEXP faceSEXP, SEXP txSEXP, SEXP tySEXP, SEXP stageSEXP) {
+BEGIN_RCPP
+    Rcpp::RObject rcpp_result_gen;
+    Rcpp::RNGScope rcpp_rngScope_gen;
+    Rcpp::traits::input_parameter< NumericVector >::type icosa(icosaSEXP);
+    Rcpp::traits::input_parameter< int >::type face(faceSEXP);
+    Rcpp::traits::input_parameter< NumericVector >::type tx(txSEXP);
+    Rcpp::traits::input_parameter< NumericVector >::type ty(tySEXP);
+    Rcpp::traits::input_parameter< int >::type stage(stageSEXP);
+    rcpp_result_gen = Rcpp::wrap(cpp_face_tri_tissot(icosa, face, tx, ty, stage));
+    return rcpp_result_gen;
+END_RCPP
+}
+// cpp_lonlat_construction
+List cpp_lonlat_construction(NumericVector icosa, NumericVector lon, NumericVector lat, IntegerVector face);
+RcppExport SEXP _hexify_cpp_lonlat_construction(SEXP icosaSEXP, SEXP lonSEXP, SEXP latSEXP, SEXP faceSEXP) {
+BEGIN_RCPP
+    Rcpp::RObject rcpp_result_gen;
+    Rcpp::RNGScope rcpp_rngScope_gen;
+    Rcpp::traits::input_parameter< NumericVector >::type icosa(icosaSEXP);
+    Rcpp::traits::input_parameter< NumericVector >::type lon(lonSEXP);
+    Rcpp::traits::input_parameter< NumericVector >::type lat(latSEXP);
+    Rcpp::traits::input_parameter< IntegerVector >::type face(faceSEXP);
+    rcpp_result_gen = Rcpp::wrap(cpp_lonlat_construction(icosa, lon, lat, face));
     return rcpp_result_gen;
 END_RCPP
 }
 
 static const R_CallMethodDef CallEntries[] = {
+    {"_hexify_cpp_globe_faces", (DL_FUNC) &_hexify_cpp_globe_faces, 2},
+    {"_hexify_cpp_globe_projection", (DL_FUNC) &_hexify_cpp_globe_projection, 1},
+    {"_hexify_cpp_globe_polygons", (DL_FUNC) &_hexify_cpp_globe_polygons, 3},
+    {"_hexify_cpp_sphere_paths_on_faces", (DL_FUNC) &_hexify_cpp_sphere_paths_on_faces, 5},
+    {"_hexify_cpp_base64_buffer", (DL_FUNC) &_hexify_cpp_base64_buffer, 2},
+    {"_hexify_cpp_base64_bytes", (DL_FUNC) &_hexify_cpp_base64_bytes, 1},
+    {"_hexify_cpp_base64_decode", (DL_FUNC) &_hexify_cpp_base64_decode, 1},
+    {"_hexify_cpp_globe_table", (DL_FUNC) &_hexify_cpp_globe_table, 8},
+    {"_hexify_cpp_globe_keys", (DL_FUNC) &_hexify_cpp_globe_keys, 5},
+    {"_hexify_cpp_globe_key_cells", (DL_FUNC) &_hexify_cpp_globe_key_cells, 5},
     {"_hexify_cpp_hex_quantize_ap3", (DL_FUNC) &_hexify_cpp_hex_quantize_ap3, 3},
     {"_hexify_cpp_hex_center_ap3", (DL_FUNC) &_hexify_cpp_hex_center_ap3, 3},
     {"_hexify_cpp_hex_corners_ap3", (DL_FUNC) &_hexify_cpp_hex_corners_ap3, 4},
@@ -1284,34 +1747,43 @@ static const R_CallMethodDef CallEntries[] = {
     {"_hexify_cpp_batch_test_roundtrip_ap3", (DL_FUNC) &_hexify_cpp_batch_test_roundtrip_ap3, 3},
     {"_hexify_cpp_batch_test_roundtrip_ap4", (DL_FUNC) &_hexify_cpp_batch_test_roundtrip_ap4, 3},
     {"_hexify_cpp_batch_test_roundtrip_ap7", (DL_FUNC) &_hexify_cpp_batch_test_roundtrip_ap7, 3},
-    {"_hexify_cpp_decode_z7", (DL_FUNC) &_hexify_cpp_decode_z7, 2},
-    {"_hexify_cpp_icosa_tri_to_quad_ij", (DL_FUNC) &_hexify_cpp_icosa_tri_to_quad_ij, 5},
-    {"_hexify_cpp_icosa_tri_to_quad_xy", (DL_FUNC) &_hexify_cpp_icosa_tri_to_quad_xy, 3},
-    {"_hexify_cpp_quad_xy_to_icosa_tri", (DL_FUNC) &_hexify_cpp_quad_xy_to_icosa_tri, 3},
+    {"_hexify_cpp_icosa_tri_to_quad_ij", (DL_FUNC) &_hexify_cpp_icosa_tri_to_quad_ij, 6},
+    {"_hexify_cpp_icosa_tri_to_quad_xy", (DL_FUNC) &_hexify_cpp_icosa_tri_to_quad_xy, 4},
+    {"_hexify_cpp_quad_xy_to_icosa_tri", (DL_FUNC) &_hexify_cpp_quad_xy_to_icosa_tri, 4},
     {"_hexify_cpp_quad_ij_to_xy", (DL_FUNC) &_hexify_cpp_quad_ij_to_xy, 5},
-    {"_hexify_cpp_lonlat_to_quad_ij", (DL_FUNC) &_hexify_cpp_lonlat_to_quad_ij, 4},
-    {"_hexify_cpp_quad_ij_to_cell", (DL_FUNC) &_hexify_cpp_quad_ij_to_cell, 5},
-    {"_hexify_cpp_lonlat_to_cell", (DL_FUNC) &_hexify_cpp_lonlat_to_cell, 4},
-    {"_hexify_cpp_cell_to_lonlat", (DL_FUNC) &_hexify_cpp_cell_to_lonlat, 3},
-    {"_hexify_cpp_cell_to_quad_ij", (DL_FUNC) &_hexify_cpp_cell_to_quad_ij, 3},
-    {"_hexify_cpp_cell_to_quad_xy", (DL_FUNC) &_hexify_cpp_cell_to_quad_xy, 3},
-    {"_hexify_cpp_quad_xy_to_cell", (DL_FUNC) &_hexify_cpp_quad_xy_to_cell, 5},
-    {"_hexify_cpp_cell_to_icosa_tri", (DL_FUNC) &_hexify_cpp_cell_to_icosa_tri, 3},
-    {"_hexify_cpp_quad_ij_to_icosa_tri", (DL_FUNC) &_hexify_cpp_quad_ij_to_icosa_tri, 5},
-    {"_hexify_cpp_cell_to_corners", (DL_FUNC) &_hexify_cpp_cell_to_corners, 3},
-    {"_hexify_cpp_cell_to_polygon", (DL_FUNC) &_hexify_cpp_cell_to_polygon, 3},
-    {"_hexify_cpp_ap_seq_edge_dim", (DL_FUNC) &_hexify_cpp_ap_seq_edge_dim, 1},
-    {"_hexify_cpp_lonlat_to_cell_seq", (DL_FUNC) &_hexify_cpp_lonlat_to_cell_seq, 3},
-    {"_hexify_cpp_cell_to_lonlat_seq", (DL_FUNC) &_hexify_cpp_cell_to_lonlat_seq, 2},
-    {"_hexify_cpp_cell_to_quad_ij_seq", (DL_FUNC) &_hexify_cpp_cell_to_quad_ij_seq, 2},
-    {"_hexify_cpp_quad_ij_to_cell_seq", (DL_FUNC) &_hexify_cpp_quad_ij_to_cell_seq, 4},
-    {"_hexify_cpp_cell_to_corners_seq", (DL_FUNC) &_hexify_cpp_cell_to_corners_seq, 2},
-    {"_hexify_cpp_cell_to_polygon_seq", (DL_FUNC) &_hexify_cpp_cell_to_polygon_seq, 2},
-    {"_hexify_cpp_get_neighbors_isea", (DL_FUNC) &_hexify_cpp_get_neighbors_isea, 3},
-    {"_hexify_cpp_get_neighbors_z7", (DL_FUNC) &_hexify_cpp_get_neighbors_z7, 2},
-    {"_hexify_cpp_icosa_tri_to_plane", (DL_FUNC) &_hexify_cpp_icosa_tri_to_plane, 3},
-    {"_hexify_cpp_cell_to_plane", (DL_FUNC) &_hexify_cpp_cell_to_plane, 3},
-    {"_hexify_cpp_lonlat_to_plane", (DL_FUNC) &_hexify_cpp_lonlat_to_plane, 2},
+    {"_hexify_cpp_lonlat_to_quad_ij", (DL_FUNC) &_hexify_cpp_lonlat_to_quad_ij, 5},
+    {"_hexify_cpp_quad_edge_dim", (DL_FUNC) &_hexify_cpp_quad_edge_dim, 3},
+    {"_hexify_cpp_grid_n_cells", (DL_FUNC) &_hexify_cpp_grid_n_cells, 4},
+    {"_hexify_cpp_cell_lattice_generator", (DL_FUNC) &_hexify_cpp_cell_lattice_generator, 3},
+    {"_hexify_cpp_quad_ij_to_cell", (DL_FUNC) &_hexify_cpp_quad_ij_to_cell, 7},
+    {"_hexify_cpp_cell_to_z7", (DL_FUNC) &_hexify_cpp_cell_to_z7, 4},
+    {"_hexify_cpp_z7_to_cell", (DL_FUNC) &_hexify_cpp_z7_to_cell, 4},
+    {"_hexify_cpp_mixed_parent", (DL_FUNC) &_hexify_cpp_mixed_parent, 4},
+    {"_hexify_cpp_lonlat_to_cell", (DL_FUNC) &_hexify_cpp_lonlat_to_cell, 6},
+    {"_hexify_cpp_cell_to_lonlat", (DL_FUNC) &_hexify_cpp_cell_to_lonlat, 5},
+    {"_hexify_cpp_cell_to_quad_ij", (DL_FUNC) &_hexify_cpp_cell_to_quad_ij, 5},
+    {"_hexify_cpp_cell_to_quad_xy", (DL_FUNC) &_hexify_cpp_cell_to_quad_xy, 4},
+    {"_hexify_cpp_quad_xy_to_cell", (DL_FUNC) &_hexify_cpp_quad_xy_to_cell, 6},
+    {"_hexify_cpp_quad_xy_to_lonlat", (DL_FUNC) &_hexify_cpp_quad_xy_to_lonlat, 4},
+    {"_hexify_cpp_cell_to_icosa_tri", (DL_FUNC) &_hexify_cpp_cell_to_icosa_tri, 4},
+    {"_hexify_cpp_quad_ij_to_icosa_tri", (DL_FUNC) &_hexify_cpp_quad_ij_to_icosa_tri, 6},
+    {"_hexify_cpp_pieces_need_split", (DL_FUNC) &_hexify_cpp_pieces_need_split, 9},
+    {"_hexify_cpp_cell_to_corners", (DL_FUNC) &_hexify_cpp_cell_to_corners, 7},
+    {"_hexify_cpp_densify_great_circle", (DL_FUNC) &_hexify_cpp_densify_great_circle, 3},
+    {"_hexify_cpp_cell_solid_angle", (DL_FUNC) &_hexify_cpp_cell_solid_angle, 6},
+    {"_hexify_cpp_cell_overlap_solid_angles", (DL_FUNC) &_hexify_cpp_cell_overlap_solid_angles, 11},
+    {"_hexify_cpp_cell_surface_paths", (DL_FUNC) &_hexify_cpp_cell_surface_paths, 6},
+    {"_hexify_cpp_icosa_solid", (DL_FUNC) &_hexify_cpp_icosa_solid, 1},
+    {"_hexify_cpp_lonlat_to_face_solid", (DL_FUNC) &_hexify_cpp_lonlat_to_face_solid, 4},
+    {"_hexify_cpp_face_tri_to_solid", (DL_FUNC) &_hexify_cpp_face_tri_to_solid, 4},
+    {"_hexify_cpp_globe_frame", (DL_FUNC) &_hexify_cpp_globe_frame, 4},
+    {"_hexify_cpp_get_neighbors_isea", (DL_FUNC) &_hexify_cpp_get_neighbors_isea, 5},
+    {"_hexify_cpp_get_neighbors_isea_lonlat", (DL_FUNC) &_hexify_cpp_get_neighbors_isea_lonlat, 5},
+    {"_hexify_cpp_cell_walls", (DL_FUNC) &_hexify_cpp_cell_walls, 7},
+    {"_hexify_cpp_ring_walls", (DL_FUNC) &_hexify_cpp_ring_walls, 3},
+    {"_hexify_cpp_icosa_tri_to_plane", (DL_FUNC) &_hexify_cpp_icosa_tri_to_plane, 4},
+    {"_hexify_cpp_cell_to_plane", (DL_FUNC) &_hexify_cpp_cell_to_plane, 4},
+    {"_hexify_cpp_lonlat_to_plane", (DL_FUNC) &_hexify_cpp_lonlat_to_plane, 3},
     {"_hexify_cpp_h3_latLngToCell", (DL_FUNC) &_hexify_cpp_h3_latLngToCell, 3},
     {"_hexify_cpp_h3_cellToLatLng", (DL_FUNC) &_hexify_cpp_h3_cellToLatLng, 1},
     {"_hexify_cpp_h3_isValidCell", (DL_FUNC) &_hexify_cpp_h3_isValidCell, 1},
@@ -1328,32 +1800,42 @@ static const R_CallMethodDef CallEntries[] = {
     {"_hexify_cpp_h3_uncompactCells", (DL_FUNC) &_hexify_cpp_h3_uncompactCells, 2},
     {"_hexify_cpp_h3_isPentagon", (DL_FUNC) &_hexify_cpp_h3_isPentagon, 1},
     {"_hexify_cpp_h3_gridDistance", (DL_FUNC) &_hexify_cpp_h3_gridDistance, 2},
-    {"_hexify_cpp_cell_to_index", (DL_FUNC) &_hexify_cpp_cell_to_index, 6},
-    {"_hexify_cpp_index_to_cell", (DL_FUNC) &_hexify_cpp_index_to_cell, 3},
+    {"_hexify_cpp_h3_cell_walls", (DL_FUNC) &_hexify_cpp_h3_cell_walls, 2},
+    {"_hexify_cpp_h3_overlap_solid_angles", (DL_FUNC) &_hexify_cpp_h3_overlap_solid_angles, 4},
+    {"_hexify_cpp_hex9_ancestor", (DL_FUNC) &_hexify_cpp_hex9_ancestor, 3},
+    {"_hexify_cpp_hex9_children", (DL_FUNC) &_hexify_cpp_hex9_children, 2},
+    {"_hexify_cpp_hex9_octahedron_cell", (DL_FUNC) &_hexify_cpp_hex9_octahedron_cell, 4},
+    {"_hexify_cpp_hex9_warp_load", (DL_FUNC) &_hexify_cpp_hex9_warp_load, 1},
+    {"_hexify_cpp_hex9_warp_ready", (DL_FUNC) &_hexify_cpp_hex9_warp_ready, 0},
+    {"_hexify_cpp_hex9_warp_texture", (DL_FUNC) &_hexify_cpp_hex9_warp_texture, 0},
+    {"_hexify_cpp_hex9_digit_strings_unique", (DL_FUNC) &_hexify_cpp_hex9_digit_strings_unique, 0},
+    {"_hexify_cpp_cell_to_index", (DL_FUNC) &_hexify_cpp_cell_to_index, 7},
+    {"_hexify_cpp_index_to_cell", (DL_FUNC) &_hexify_cpp_index_to_cell, 4},
     {"_hexify_cpp_get_parent_index", (DL_FUNC) &_hexify_cpp_get_parent_index, 3},
-    {"_hexify_cpp_get_children_indices", (DL_FUNC) &_hexify_cpp_get_children_indices, 3},
+    {"_hexify_cpp_get_children_indices", (DL_FUNC) &_hexify_cpp_get_children_indices, 4},
     {"_hexify_cpp_get_index_resolution", (DL_FUNC) &_hexify_cpp_get_index_resolution, 3},
     {"_hexify_cpp_compare_indices", (DL_FUNC) &_hexify_cpp_compare_indices, 2},
     {"_hexify_cpp_is_valid_index_type", (DL_FUNC) &_hexify_cpp_is_valid_index_type, 2},
     {"_hexify_cpp_get_default_index_type", (DL_FUNC) &_hexify_cpp_get_default_index_type, 1},
-    {"_hexify_cpp_lonlat_to_index_ap3", (DL_FUNC) &_hexify_cpp_lonlat_to_index_ap3, 4},
-    {"_hexify_cpp_lonlat_to_index_ap4", (DL_FUNC) &_hexify_cpp_lonlat_to_index_ap4, 4},
-    {"_hexify_cpp_lonlat_to_index_ap7", (DL_FUNC) &_hexify_cpp_lonlat_to_index_ap7, 4},
-    {"_hexify_cpp_lonlat_to_index", (DL_FUNC) &_hexify_cpp_lonlat_to_index, 5},
-    {"_hexify_cpp_index_to_lonlat", (DL_FUNC) &_hexify_cpp_index_to_lonlat, 3},
-    {"_hexify_cpp_z7_canonical_form", (DL_FUNC) &_hexify_cpp_z7_canonical_form, 2},
+    {"_hexify_cpp_lonlat_to_index", (DL_FUNC) &_hexify_cpp_lonlat_to_index, 6},
+    {"_hexify_cpp_index_to_lonlat", (DL_FUNC) &_hexify_cpp_index_to_lonlat, 4},
+    {"_hexify_cpp_z7_canonical_form", (DL_FUNC) &_hexify_cpp_z7_canonical_form, 3},
     {"_hexify_cpp_build_icosa", (DL_FUNC) &_hexify_cpp_build_icosa, 3},
-    {"_hexify_cpp_which_face", (DL_FUNC) &_hexify_cpp_which_face, 2},
-    {"_hexify_cpp_face_centers", (DL_FUNC) &_hexify_cpp_face_centers, 0},
-    {"_hexify_cpp_snyder_forward", (DL_FUNC) &_hexify_cpp_snyder_forward, 2},
-    {"_hexify_cpp_project_to_icosa_triangle", (DL_FUNC) &_hexify_cpp_project_to_icosa_triangle, 3},
-    {"_hexify_cpp_snyder_inv_set_precision", (DL_FUNC) &_hexify_cpp_snyder_inv_set_precision, 3},
-    {"_hexify_cpp_snyder_inv_get_precision", (DL_FUNC) &_hexify_cpp_snyder_inv_get_precision, 0},
-    {"_hexify_cpp_snyder_inv_set_verbose", (DL_FUNC) &_hexify_cpp_snyder_inv_set_verbose, 1},
-    {"_hexify_cpp_snyder_inv_get_stats_and_reset", (DL_FUNC) &_hexify_cpp_snyder_inv_get_stats_and_reset, 0},
+    {"_hexify_cpp_solid_info", (DL_FUNC) &_hexify_cpp_solid_info, 1},
+    {"_hexify_cpp_which_face", (DL_FUNC) &_hexify_cpp_which_face, 3},
+    {"_hexify_cpp_face_centers", (DL_FUNC) &_hexify_cpp_face_centers, 1},
+    {"_hexify_cpp_sphere_latitude", (DL_FUNC) &_hexify_cpp_sphere_latitude, 4},
+    {"_hexify_cpp_authalic_radius_ratio", (DL_FUNC) &_hexify_cpp_authalic_radius_ratio, 1},
+    {"_hexify_cpp_icosa_forward", (DL_FUNC) &_hexify_cpp_icosa_forward, 3},
+    {"_hexify_cpp_project_to_icosa_triangle", (DL_FUNC) &_hexify_cpp_project_to_icosa_triangle, 4},
     {"_hexify_cpp_face_xy_to_ll", (DL_FUNC) &_hexify_cpp_face_xy_to_ll, 5},
-    {"_hexify_cpp_icosa_face_params", (DL_FUNC) &_hexify_cpp_icosa_face_params, 1},
-    {"_hexify_cpp_hex_index_face_to_lonlat", (DL_FUNC) &_hexify_cpp_hex_index_face_to_lonlat, 8},
+    {"_hexify_cpp_snyder_triangle_forward", (DL_FUNC) &_hexify_cpp_snyder_triangle_forward, 4},
+    {"_hexify_cpp_snyder_triangle_inverse", (DL_FUNC) &_hexify_cpp_snyder_triangle_inverse, 4},
+    {"_hexify_cpp_icosa_face_params", (DL_FUNC) &_hexify_cpp_icosa_face_params, 2},
+    {"_hexify_cpp_hex_index_face_to_lonlat", (DL_FUNC) &_hexify_cpp_hex_index_face_to_lonlat, 7},
+    {"_hexify_cpp_lonlat_tissot", (DL_FUNC) &_hexify_cpp_lonlat_tissot, 5},
+    {"_hexify_cpp_face_tri_tissot", (DL_FUNC) &_hexify_cpp_face_tri_tissot, 5},
+    {"_hexify_cpp_lonlat_construction", (DL_FUNC) &_hexify_cpp_lonlat_construction, 4},
     {NULL, NULL, 0}
 };
 

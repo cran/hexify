@@ -5,6 +5,14 @@ source("_common.R")
 knitr::opts_chunk$set(eval = CAN_RUN)
 library(hexify)
 
+## ----eval = FALSE-------------------------------------------------------------
+# # Install from CRAN
+# install.packages("hexify")
+# 
+# # Or install development version from GitHub
+# # install.packages("pak")
+# pak::pak("gcol33/hexify")
+
 ## ----h3-grid------------------------------------------------------------------
 library(sf)
 library(ggplot2)
@@ -29,7 +37,7 @@ result
 
 ## ----h3-cell-ids--------------------------------------------------------------
 # Cell IDs are hexadecimal strings
-result@cell_id
+result$cell_id
 
 # All standard accessors work
 cells(result)
@@ -51,8 +59,8 @@ ggplot() +
   geom_sf(data = europe, fill = "gray95", color = "gray60") +
   geom_sf(data = europe_h3, fill = NA, color = "#E6550D", linewidth = 0.4) +
   coord_sf(xlim = c(-10, 25), ylim = c(35, 60)) +
-  labs(title = sprintf("H3 Resolution %d Grid", grid_h3@resolution),
-       subtitle = sprintf("~%.0f km² average cell", grid_h3@area_km2)) +
+  labs(title = sprintf("H3 Resolution %d Grid", summary(grid_h3)$resolution),
+       subtitle = sprintf("~%.0f km² average cell", summary(grid_h3)$area_km2)) +
   theme_minimal(base_size = FIG_BASE_SIZE)
 
 ## ----h3-grid-clip, fig.width=7, fig.height=7----------------------------------
@@ -66,7 +74,7 @@ ggplot() +
   geom_sf(data = france_h3, fill = alpha("#E6550D", 0.3),
           color = "#E6550D", linewidth = 0.3) +
   coord_sf(xlim = c(-5, 10), ylim = c(41, 52)) +
-  labs(title = sprintf("H3 Grid Clipped to France (res %d)", grid_h3@resolution)) +
+  labs(title = sprintf("H3 Grid Clipped to France (res %d)", summary(grid_h3)$resolution)) +
   theme_minimal(base_size = FIG_BASE_SIZE)
 
 ## ----h3-parent----------------------------------------------------------------
@@ -87,7 +95,7 @@ grid_coarse <- hex_grid(resolution = 3, type = "h3")
 coarse_id <- lonlat_to_cell(16.37, 48.21, grid_coarse)
 
 children <- get_children(coarse_id, grid_coarse, levels = 1)
-cat(length(children[[1]]), "children at resolution", grid_coarse@resolution + 1, "\n")
+cat(length(children[[1]]), "children at resolution", summary(grid_coarse)$resolution + 1, "\n")
 head(children[[1]])
 
 ## ----h3-hierarchy-plot, fig.width=7, fig.height=5-----------------------------
@@ -102,9 +110,9 @@ ggplot() +
   geom_sf(data = children_poly, fill = alpha("#E6550D", 0.3),
           color = "#E6550D", linewidth = 0.5) +
   geom_sf(data = parent_poly, fill = NA, color = "black", linewidth = 1.2) +
-  labs(title = sprintf("H3 Hierarchy: 1 parent (res %d)", grid_coarse@resolution),
+  labs(title = sprintf("H3 Hierarchy: 1 parent (res %d)", summary(grid_coarse)$resolution),
        subtitle = sprintf("%d children (res %d)",
-                          length(children[[1]]), grid_fine@resolution)) +
+                          length(children[[1]]), summary(grid_fine)$resolution)) +
   theme_minimal(base_size = FIG_BASE_SIZE)
 
 ## ----h3-workflow, fig.width=7, fig.height=5.25, message=FALSE, warning=FALSE----
@@ -125,7 +133,6 @@ obs_hex <- hexify(obs, lon = "lon", lat = "lat", grid = grid_h3)
 
 # Aggregate: species richness per cell
 obs_df <- as.data.frame(obs_hex)
-obs_df$cell_id <- obs_hex@cell_id
 
 richness <- aggregate(species ~ cell_id, data = obs_df,
                       FUN = function(x) length(unique(x)))
@@ -144,7 +151,7 @@ ggplot() +
   coord_sf(xlim = c(-10, 40), ylim = c(35, 65)) +
   labs(title = "Species Richness on H3 Grid",
        subtitle = sprintf("H3 resolution %d (~%.0f km² avg cells)",
-                          grid_h3@resolution, grid_h3@area_km2)) +
+                          summary(grid_h3)$resolution, summary(grid_h3)$area_km2)) +
   theme_minimal(base_size = FIG_BASE_SIZE) +
   theme(axis.text = element_blank(), axis.ticks = element_blank())
 

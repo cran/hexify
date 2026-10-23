@@ -2,7 +2,7 @@
 % Please edit documentation in R/hexify_cell_to_sf.R
 \name{hexify_cell_to_sf}
 \alias{hexify_cell_to_sf}
-\title{Convert cell IDs to sf polygons}
+\title{Convert Cell IDs to sf Polygons}
 \usage{
 hexify_cell_to_sf(
   cell_id,
@@ -18,7 +18,8 @@ hexify_cell_to_sf(
 
 \item{resolution}{Grid resolution level. Can be omitted if grid is provided.}
 
-\item{aperture}{Grid aperture: 3, 4, or 7. Can be omitted if grid is provided.}
+\item{aperture}{Grid aperture: 3, 4, 7, or a mixed spelling as
+\code{\link{hex_grid}} takes it. Can be omitted if grid is provided.}
 
 \item{return_sf}{Logical. If TRUE (default), returns sf object with polygon
 geometries. If FALSE, returns data frame with vertex coordinates.}
@@ -27,8 +28,12 @@ geometries. If FALSE, returns data frame with vertex coordinates.}
 are extracted from it.}
 
 \item{wrap_dateline}{Logical. If TRUE (default), calls
-\code{sf::st_wrap_dateline()} to split antimeridian-crossing polygons.
-Set to FALSE for orthographic/globe projections where wrapping creates gaps.}
+\code{sf::st_wrap_dateline()} to split antimeridian-crossing polygons,
+which flat maps and planar (GEOS) operations need.
+Set to FALSE for orthographic/globe projections where wrapping creates gaps,
+and for spherical (s2) operations: each cell then stays one polygon whose
+corners lie in -180..180, so a cell crossing the antimeridian spans a
+flat lon/lat map.}
 }
 \value{
 If return_sf = TRUE: sf object with columns:
@@ -39,7 +44,8 @@ If return_sf = FALSE: data frame with columns:
 \item{cell_id}{Cell identifier}
 \item{lon}{Vertex longitude}
 \item{lat}{Vertex latitude}
-\item{order}{Vertex order (1-7, 7 closes the polygon)}
+\item{order}{Vertex order along the ring; the last vertex repeats the
+first, closing the polygon}
 }
 \description{
 Creates polygon geometries for hexagonal grid cells from their cell IDs.

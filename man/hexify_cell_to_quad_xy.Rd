@@ -2,14 +2,14 @@
 % Please edit documentation in R/hexify_conversions.R
 \name{hexify_cell_to_quad_xy}
 \alias{hexify_cell_to_quad_xy}
-\title{Convert Cell ID to Quad XY coordinates}
+\title{Convert Cell ID to Quad XY Coordinates}
 \usage{
 hexify_cell_to_quad_xy(cell_id, resolution, aperture = 3L)
 }
 \arguments{
-\item{cell_id}{Numeric vector of cell IDs (1-based)}
+\item{cell_id}{Cell IDs, from 1: integer64, or whole numbers below 2^53}
 
-\item{resolution}{Grid resolution level (0-30)}
+\item{resolution}{Grid resolution level (0-30 for aperture 3, 0-29 for aperture 4, 0-21 for aperture 7)}
 
 \item{aperture}{Grid aperture: 3, 4, or 7}
 }
@@ -41,7 +41,6 @@ cell_id <- hexify_quad_xy_to_cell(result$quad, result$quad_x, result$quad_y,
 \code{\link{hexify_cell_to_quad_ij}} for integer grid coordinates
 
 Other coordinate conversion:
-\code{\link[=hexify_cell_id_to_quad_ij]{hexify_cell_id_to_quad_ij()}},
 \code{\link[=hexify_cell_to_icosa_tri]{hexify_cell_to_icosa_tri()}},
 \code{\link[=hexify_cell_to_lonlat]{hexify_cell_to_lonlat()}},
 \code{\link[=hexify_cell_to_plane]{hexify_cell_to_plane()}},

@@ -2,12 +2,16 @@
 % Please edit documentation in R/dggrid_compat.R
 \name{from_dggrid}
 \alias{from_dggrid}
-\title{Convert 'dggridR' grid object to hexify_grid}
+\title{Convert 'dggridR' Grid Object to hexify_grid}
 \usage{
-from_dggrid(dggs)
+from_dggrid(dggs, radius_km = EARTH_RADIUS_KM)
 }
 \arguments{
 \item{dggs}{A 'dggridR' grid object from dgconstruct()}
+
+\item{radius_km}{Radius the grid is sized on, in km or as a body name. A dggs
+carries no radius, so the default is Earth's; pass this when the dggs
+describes a grid on another body.}
 }
 \value{
 A hexify_grid object
@@ -17,15 +21,29 @@ Creates a hexify_grid object from a 'dggridR' dggs object. This allows
 using hexify functions with grids created by 'dggridR' dgconstruct().
 }
 \details{
-Only 'ISEA' projection with HEXAGON topology is fully supported.
+The 'ISEA' and 'FULLER' projections with HEXAGON topology are supported.
 Other configurations will generate warnings.
+
+A dggs has no field for the body it is sized on, so the resolution is all
+that carries over and the result is an Earth grid unless \code{radius_km}
+says otherwise. Cell area follows from the radius, so it is read from the
+radius given rather than from the dggs.
+
+The orientation carries over: \code{pole_lon_deg}, \code{pole_lat_deg} and
+\code{azimuth_deg} place the icosahedron as DGGRID's \code{dggs_vert0_lon},
+\code{dggs_vert0_lat} and \code{dggs_vert0_azimuth} do, and a field left out
+takes its standard ISEA value.
 
 The function validates that the 'dggridR' grid uses compatible settings:
 \itemize{
-\item Projection must be 'ISEA' (FULLER not supported)
+\item Projection must be 'ISEA' or 'FULLER'
 \item Topology must be "HEXAGON" (DIAMOND, TRIANGLE not supported)
 \item Aperture must be 3, 4, or 7
 }
+}
+\examples{
+dggs <- as_dggrid(hex_grid(resolution = 4, aperture = 4))
+from_dggrid(dggs)
 }
 \seealso{
 Other 'dggridR' compatibility:

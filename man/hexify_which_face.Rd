@@ -2,23 +2,32 @@
 % Please edit documentation in R/hexify_projection.R
 \name{hexify_which_face}
 \alias{hexify_which_face}
-\title{Determine which face contains a point}
+\title{Determine Which Face Contains a Point}
 \usage{
-hexify_which_face(lon, lat)
+hexify_which_face(
+  lon,
+  lat,
+  polyhedron = c("icosahedron", "octahedron", "tetrahedron")
+)
 }
 \arguments{
 \item{lon}{Longitude in degrees}
 
 \item{lat}{Latitude in degrees}
+
+\item{polyhedron}{The solid: "icosahedron" (default), "octahedron" or
+"tetrahedron", in its default orientation}
 }
 \value{
-Integer face index (0-19)
+Integer face index
 }
 \description{
-Returns the icosahedral face index (0-19) containing the given coordinates.
+Returns the index of the face of the solid containing the given
+coordinates (0-19 on the icosahedron).
 }
 \examples{
 face <- hexify_which_face(16.37, 48.21)
+hexify_which_face(16.37, 48.21, polyhedron = "tetrahedron")
 }
 \seealso{
 Other projection:
@@ -26,10 +35,7 @@ Other projection:
 \code{\link[=hexify_face_centers]{hexify_face_centers()}},
 \code{\link[=hexify_forward]{hexify_forward()}},
 \code{\link[=hexify_forward_to_face]{hexify_forward_to_face()}},
-\code{\link[=hexify_get_precision]{hexify_get_precision()}},
-\code{\link[=hexify_inverse]{hexify_inverse()}},
-\code{\link[=hexify_projection_stats]{hexify_projection_stats()}},
-\code{\link[=hexify_set_precision]{hexify_set_precision()}},
-\code{\link[=hexify_set_verbose]{hexify_set_verbose()}}
+\code{\link[=hexify_inverse]{hexify_inverse()}}
 }
 \concept{projection}
+\keyword{internal}

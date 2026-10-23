@@ -16,7 +16,10 @@
 #'
 #' @param area_km2 Target cell area in square kilometers. Mutually exclusive
 #'   with \code{resolution}.
-#' @param resolution Grid resolution level (0-30 for ISEA, 0-15 for H3).
+#' @param resolution Grid resolution level: for ISEA 0-30 for aperture 3, 0-29 for aperture 4, 0-21 for aperture 7
+#'   on the icosahedron, where the cell count stays within the 2^63 - 1
+#'   cell IDs a 64-bit integer numbers; 0-18 for aperture 9 (Hex9); 0-15 for
+#'   H3.
 #'   Mutually exclusive with \code{area_km2}. For H3, typical use cases by
 #'   resolution:
 #'   \itemize{
@@ -25,13 +28,19 @@
 #'     \item 8-10: neighborhood/block scale (FCC uses 8-9)
 #'     \item 11-15: building/sub-meter scale
 #'   }
-#' @param aperture Grid aperture: 3 (default), 4, 7, a mixed family such as
+#' @param aperture Grid aperture: 3 (default), 4, 7, 9 for Hex9 on the
+#'   octahedron (see the Hex9 section), a mixed family such as
 #'   "4/3", "4/7" or "7/4", or one aperture per resolution level as a vector,
 #'   e.g. \code{c(4, 4, 7, 3)}. A family name refines by the first aperture for
 #'   the first \code{floor(resolution / 2)} levels and by the second for the
 #'   rest, which is how DGGRID arranges ISEA43H. A per-level vector needs
-#'   \code{resolution} rather than \code{area_km2}. Ignored for H3 grids (fixed
-#'   at 7).
+#'   \code{resolution} rather than \code{area_km2}; one shorter than
+#'   \code{resolution} recurs, as OGC Topic 21 reads a list of refinement
+#'   ratios, so \code{c(4, 3)} at resolution 5 refines by 4, 3, 4, 3, 4. It is
+#'   stored as a comma-separated string with one aperture per level
+#'   (\code{"4,3,4,3,4"}), which \code{aperture} also accepts. It names no
+#'   level finer than \code{resolution}, so \code{get_children()} needs a
+#'   family name. Ignored for H3 grids (fixed at 7).
 #' @param type Grid type: "isea" (default) or "h3".
 #' @param resround Resolution rounding when using \code{area_km2}:
 #'   "nearest" (default), "up", or "down".
@@ -42,6 +51,35 @@
 #'   name of a body: "mercury", "venus", "earth" (default), "moon", "mars",
 #'   "ceres", "jupiter", "io", "europa", "ganymede", "callisto", "saturn",
 #'   "enceladus", "titan", "uranus", "neptune", "pluto".
+#' @param orientation Where the icosahedron of an ISEA grid sits on the
+#'   sphere: "standard" (default), "ogc", "dymaxion", "gosper", "random",
+#'   "region", "face", or
+#'   \code{c(vert0_lon, vert0_lat, azimuth)} in degrees. See the Orientation
+#'   section. H3 fixes its own orientation, so H3 grids take only "standard".
+#' @param projection How an ISEA-family grid projects each icosahedron face
+#'   onto its plane triangle: "isea" (default), Snyder's equal-area
+#'   projection, "ivea", van Leeuwen and Strebe's vertex-oriented equal-area
+#'   projection, "fuller", Fuller's projection, or, on the octahedron, "ak",
+#'   Kaseorg's projection, or "akw", Kaseorg's with Hex9's trained warp
+#'   (see \code{\link{hex9_warp_download}}). See the Projection section.
+#'   H3 fixes its own projection, so H3 grids take only "isea".
+#' @param region For \code{orientation = "region"} or \code{"face"}, the area
+#'   to centre the grid
+#'   on: \code{c(lon, lat)} in degrees, or an sf, sfc or bbox object, whose
+#'   spherical centroid is used.
+#' @param polyhedron The solid an ISEA-family grid is built on:
+#'   "icosahedron" (default), "octahedron" or "tetrahedron". See the
+#'   Polyhedron section. H3 grids are built on the icosahedron and take only
+#'   the default. Aperture 9 is defined on the octahedron, which it takes when
+#'   no solid is named.
+#' @param ellipsoid The ellipsoid of revolution an ISEA-family grid reads
+#'   geodetic latitude on: \code{NULL} (default) reads latitude on the sphere;
+#'   "WGS84", "GRS80", "earth" (WGS84), "mars", "jupiter", "saturn",
+#'   "uranus" or "neptune"; or \code{c(a, f)}, the semi-major axis in km and
+#'   the flattening. Cells are then exactly equal-area on the ellipsoid, and
+#'   the grid is sized on the radius of the sphere of the ellipsoid's area,
+#'   which \code{radius_km} need not give. See the Earth Model section. H3
+#'   reads latitude on the sphere and takes only \code{NULL}.
 #'
 #' @return A HexGridInfo object containing the grid specification.
 #'
@@ -49,12 +87,16 @@
 #' Exactly one of \code{area_km2} or \code{resolution} must be provided.
 #'
 #' When \code{area_km2} is provided, the resolution is calculated automatically
-#' using the cell count formula: N = 10 * aperture^res + 2 (ISEA) or by
-#' matching the closest H3 resolution.
+#' using the cell count formula: N = 10 * aperture^res + 2 (ISEA on the
+#' icosahedron, 4 * aperture^res + 2 on the octahedron, 2 * aperture^res + 2
+#' on the tetrahedron) or by matching the
+#' closest H3 resolution.
 #'
 #' H3 grids use the Uber H3 hierarchical hexagonal system. Unlike ISEA grids,
-#' H3 cells are NOT exactly equal-area (area varies by ~3-5\% depending on
-#' location).
+#' H3 cells are NOT exactly equal-area: hexagon area varies by about a factor
+#' of 2 within a resolution, and by about 2.4 once the twelve pentagons are
+#' counted. The variation follows position on the icosahedron rather than
+#' latitude, with the smallest cells near face centres.
 #'
 #' @section Other Bodies:
 #'
@@ -77,6 +119,195 @@
 #' names a position in 'H3''s topology, which 'Uber''s 'H3' reads on Earth, so
 #' the IDs of a grid on another body are that topology on that body and are not
 #' interchangeable with Earth 'H3' data.
+#'
+#' @section Earth Model:
+#'
+#' By default a grid reads geodetic latitude as latitude on its sphere, as
+#' DGGRID and H3 do, and an Earth grid shares the 'WGS84' ellipsoid's area
+#' among its cells. Measured geodesically on 'WGS84', the cells' areas then
+#' run from 0.9955 times the reported area at the equator to 1.0090 times it
+#' at the poles (\code{paper/bench/bench_ellipsoid_area.R}): within the 1
+#' percent error budget OGC Topic 21 allows a spherical earth model for an
+#' equal-area grid (Requirement 28), and systematic in latitude.
+#'
+#' With \code{ellipsoid}, geodetic latitude is converted to authalic
+#' latitude, the latitude on the sphere of the ellipsoid's area below which
+#' that sphere holds the same area as the ellipsoid below the geodetic one,
+#' before projecting, and back after. This carries the ellipsoid onto that
+#' sphere keeping every area, so cells of Snyder's and of the vertex-oriented
+#' projection are equal-area on the ellipsoid itself; on 'WGS84' the measured
+#' areas agree with the reported ones to the measurement's own error, about
+#' 2e-6. Fuller's projection stays not equal-area, but its cell areas are
+#' then the cells' areas on the ellipsoid. The conversion moves a point by up
+#' to 0.13 degrees of latitude on 'WGS84', so a grid with an ellipsoid places
+#' points in other cells than the same grid without one, and than DGGRID.
+#' Cell IDs, the hierarchy and neighbours are the same; kilometre figures of
+#' lengths are measured on the sphere of the ellipsoid's area.
+#'
+#' The ISEA3H and ISEA7H DGGRS definitions OGC registers are
+#' \code{hex_grid(aperture = 3, ellipsoid = "WGS84", orientation = "ogc")}
+#' and its aperture-7 twin, and DGGAL's IVEA3H and IVEA7H the same with
+#' \code{projection = "ivea"}.
+#'
+#' \preformatted{
+#' g <- hex_grid(resolution = 9, aperture = 3, ellipsoid = "WGS84")
+#' hex_grid(resolution = 6, aperture = 7, ellipsoid = "mars")
+#' hex_grid(resolution = 6, ellipsoid = c(6378.137, 1 / 298.257222101)) # GRS80
+#' }
+#'
+#' @section Orientation:
+#'
+#' An ISEA grid is built on a solid, an icosahedron unless \code{polyhedron}
+#' names another, and its orientation places that solid on the sphere: vertex
+#' 0 at longitude \code{vert0_lon} and latitude \code{vert0_lat}, and vertex 1
+#' at azimuth \code{azimuth} seen from vertex 0, all in degrees, as DGGRID's
+#' \code{dggs_vert0_lon}, \code{dggs_vert0_lat} and \code{dggs_vert0_azimuth}
+#' do.
+#'
+#' \itemize{
+#'   \item "standard" is the ISEA orientation on the icosahedron: vertex 0 at
+#'     11.25E, 58.28N, azimuth 0, symmetric about the equator, with eleven
+#'     of the twelve pentagons over the oceans and one in Sichuan (Sahr et al.
+#'     2003). On the octahedron it puts vertices at both poles and at
+#'     longitudes 0, 90E, 180 and 90W on the equator.
+#'   \item "ogc" is the orientation of the ISEA3H and ISEA7H DGGRS
+#'     definitions registered with OGC and of DGGAL's grids: vertex 0 at
+#'     11.20E and latitude arctan of the golden ratio (58.28N) on the sphere,
+#'     azimuth 0. With \code{ellipsoid = "WGS84"} that vertex lies at
+#'     geodetic latitude 58.397145907431N.
+#'   \item "dymaxion" is Fuller's orientation of the icosahedron for his
+#'     Dymaxion map: vertex 0 at 5.2454W, 2.3009N, azimuth 7.46658 (Sahr et
+#'     al. 2003), with all twelve pentagons in the ocean. With
+#'     \code{projection = "fuller"} the grid lies on Fuller's Dymaxion map.
+#'   \item "gosper" places the octahedron as Van de Sande's Gosper World
+#'     places its poles, at midpoints of octahedron edges: vertex 0 at
+#'     21.25W, 45N, vertex 1 across the north pole from it, all six vertices
+#'     at least 619 km offshore. \code{\link{net_layout}} lays it out as four
+#'     hexagons. The standard octahedron puts the poles at vertices instead,
+#'     as Rus's four-hexagon map does.
+#'   \item "random" draws vertex 0 uniformly on the sphere and the azimuth
+#'     uniformly in [0, 360), from R's random number generator, so
+#'     \code{set.seed()} repeats it. Grids in several random orientations show
+#'     how much a result depends on where the cell boundaries fall.
+#'   \item "region" places the grid as DGGRID's \code{REGION_CENTER} does: the
+#'     centre of \code{region} lands on the midpoint of an edge of the solid,
+#'     the middle of the two faces sharing it, far from the vertices where the
+#'     vertex cells and the largest distortion sit.
+#'   \item "face" places the centre of \code{region} on the centre of a face.
+#'     On the icosahedron that is about 20.9 degrees from the nearest face edge
+#'     and 37.4 degrees from the nearest vertex, so a region up to about 40
+#'     degrees across lies on one face, away from the face edges where the
+#'     projection bends.
+#' }
+#'
+#' Rotating the icosahedron rotates the grid with it, so cell IDs, the cell
+#' hierarchy and neighbours are the same under every orientation; only where
+#' each cell sits on the sphere changes. Every function taking the grid reads
+#' its orientation. On a grid with an \code{ellipsoid} the orientation places
+#' the solid on the sphere of the ellipsoid's area, so \code{vert0_lat} is an
+#' authalic latitude; a \code{region} is given in geodetic latitude.
+#'
+#' \preformatted{
+#' alps <- hex_grid(area_km2 = 100, orientation = "region", region = c(10, 46.5))
+#' hex_grid(resolution = 8, orientation = c(0, 90, 0))   # vertex 0 at the pole
+#' }
+#'
+#' @section Projection:
+#'
+#' An ISEA-family grid lays its cells out on the plane triangles of the
+#' icosahedron's faces, and the projection carries each spherical face onto its
+#' triangle. With \code{"isea"}, Snyder's icosahedral equal-area projection,
+#' every cell of a resolution has the same area. With \code{"ivea"}, van
+#' Leeuwen and Strebe's (2006) vertex-oriented great-circle projection, cells
+#' are equal-area as well: the projection maps the great circles through each
+#' vertex of a face to straight lines, which leaves no cusps along the face
+#' edges and gives lower, more even angular distortion than Snyder's (their
+#' Table 1). These are DGGAL's IVEA3H and IVEA7H (Jacovella-St-Louis et al.
+#' 2025); DGGAL places the icosahedron at \code{orientation = c(11.20,
+#' 58.282525588538995, 0)}, 0.05 degrees west of the standard one, and reads
+#' latitudes as WGS84 geodetic, mapping them to the authalic sphere. With
+#' \code{"fuller"}, Fuller's
+#' projection keeps lengths along the face edges and is not equal-area, so
+#' \code{area_km2} is the mean cell area and \code{cell_area()} reports each
+#' cell's own; the Equal-Area Earth Reference System of OGC Topic 21 asks for
+#' cells of equal area, so a Fuller grid falls outside it. These are DGGRID's
+#' \code{dggs_proj ISEA} and \code{FULLER},
+#' giving FULLER3H, FULLER4H, FULLER7H and FULLER43H. Cell IDs, the hierarchy
+#' and neighbours are the same under every projection; where each cell's
+#' centre and corners sit on the sphere differs.
+#'
+#' \preformatted{
+#' hex_grid(resolution = 5, aperture = 3, projection = "ivea")     # IVEA3H
+#' hex_grid(resolution = 5, aperture = 4, projection = "fuller")   # FULLER4H
+#' }
+#'
+#' @section Polyhedron:
+#'
+#' Snyder's equal-area projection and the vertex-oriented one are defined on
+#' every regular solid with triangular faces, and a hexagonal grid lies on
+#' the icosahedron, the octahedron and the tetrahedron alike: each pair of
+#' faces sharing an edge forms a diamond of cells, and the cell at each vertex
+#' has one side per face meeting there. The icosahedron has twelve pentagons,
+#' the octahedron six squares and the tetrahedron four triangles; every other
+#' cell is a hexagon, and every cell of a resolution has the same area except
+#' the vertex cells, which have five sixths, two thirds or one half of it, by
+#' their sides. The octahedron's cells are more distorted than the
+#' icosahedron's and the tetrahedron's more again, so they suit layouts that
+#' need their four- or three-fold symmetry rather than analysis. Fuller's
+#' projection is defined on the icosahedron only.
+#'
+#' The tetrahedron unfolds into a strip of its two diamonds. Each long side
+#' of the strip folds onto itself at its midpoint, so the second diamond
+#' holds the far edge of its box in place of the near edge it shares with the
+#' first; its cells still number one box's worth.
+#'
+#' \preformatted{
+#' hex_grid(resolution = 5, aperture = 4, polyhedron = "octahedron")
+#' hex_grid(resolution = 5, aperture = 4, polyhedron = "tetrahedron")
+#' }
+#'
+#' @section Hex9:
+#'
+#' \code{aperture = 9} builds Hex9 (Griffin 2026), the hexagonal grid of the
+#' octahedron that refines by 9 with no central child. Level \eqn{L} divides
+#' each octahedron edge into \eqn{3^{L+1}} steps of a triangular lattice and
+#' centres a hexagon on every third lattice point, one class of a three-colouring
+#' of the lattice that leaves the solid's vertices out; the octahedron's even
+#' vertex valence keeps that class consistent across its faces, which the
+#' icosahedron's odd valence does not. There are \eqn{12 \cdot 9^L} cells, all
+#' hexagons. Two meet at each of the six vertices, a corner each, and share both
+#' edges there, so those twelve cells have five neighbours. On an equal-area
+#' projection every cell has the same area.
+#'
+#' A line through each cell's centre cuts it into two halves, each inside one
+#' triangle of the next coarser level, and the cell is named through its half
+#' in a triangle of Griffin's mode 0: one digit for each level of triangles
+#' holding that half, digit 0 picking one of the twelve cells of resolution 0
+#' (0-11) and every further digit one of nine (0-8). The cell ID is that digit
+#' string read as a number, digit 0 counting \eqn{9^L}, plus one, so the IDs of
+#' a resolution run from 1 to \eqn{12 \cdot 9^L}; the digit strings are those
+#' of 'libhex9', Griffin's reference implementation, and
+#' \code{cell_to_index()} writes a cell's 'libhex9' label, its digits and key
+#' tail. A cell's parent is the cell of the coarser resolution holding its
+#' mode-0 half, and every cell has nine children. Three of them straddle the
+#' cell's boundary, so a cell's children cover it only in part.
+#'
+#' Hex9's own projection is Kaseorg's octahedral projection, \code{"ak"}
+#' (Griffin 2026, Sec. 11a): it maps each octant's weights on its three
+#' vertices through tangents of the weights, coupled by a fitted constant, and
+#' is not equal-area, its cells varying by about 20 percent in area across a
+#' face. 'libhex9' corrects that with a warp of each face trained by optimal
+#' transport (Sec. 11b): \code{"akw"} reads it (\code{\link{hex9_warp_download}}
+#' fetches it), and a grid on it names every point by the cell 'libhex9''s
+#' functions on the sphere name it. Any of the face projections serves the
+#' same cells of the octahedron, with the same IDs; where each cell lies on
+#' the sphere follows \code{projection}.
+#'
+#' \preformatted{
+#' hex_grid(resolution = 4, aperture = 9)                       # Hex9
+#' hex_grid(resolution = 4, aperture = 9, projection = "ivea")
+#' hex_grid(resolution = 4, aperture = 9, projection = "ak")
+#' }
 #'
 #' @seealso \code{\link{hexify}} for assigning points to cells,
 #'   \code{\link{HexGridInfo-class}} for class documentation
@@ -146,12 +377,34 @@ hex_grid <- function(area_km2 = NULL,
                      type = c("isea", "h3"),
                      resround = "nearest",
                      crs = NULL,
-                     radius_km = EARTH_RADIUS_KM) {
+                     radius_km = EARTH_RADIUS_KM,
+                     orientation = "standard",
+                     projection = c("isea", "fuller", "ivea", "ak", "akw"),
+                     region = NULL,
+                     polyhedron = c("icosahedron", "octahedron", "tetrahedron"),
+                     ellipsoid = NULL) {
 
   type <- match.arg(type)
+  projection <- match.arg(projection)
+  polyhedron <- if (missing(polyhedron) && is_hex9_aperture(aperture)) {
+    "octahedron"
+  } else {
+    match.arg(polyhedron)
+  }
 
+  radius_given <- !missing(radius_km)
+  ellipsoid <- resolve_ellipsoid(ellipsoid)
   radius_km <- resolve_radius_km(radius_km)
-  crs <- resolve_crs(crs, radius_km)
+  if (length(ellipsoid) == 2L) {
+    authalic <- authalic_radius_km(ellipsoid)
+    if (radius_given && !isTRUE(all.equal(radius_km, authalic, tolerance = 1e-12))) {
+      stop("ellipsoid sets the radius, the radius of the sphere of its area (",
+           format(authalic, digits = 12), " km); leave radius_km out",
+           call. = FALSE)
+    }
+    radius_km <- authalic
+  }
+  crs <- resolve_crs(crs, radius_km, ellipsoid)
 
   # =========================================================================
   # H3 grid path
@@ -159,6 +412,22 @@ hex_grid <- function(area_km2 = NULL,
   if (type == "h3") {
     if (!missing(aperture) && aperture != 3) {
       warning("aperture is ignored for H3 grids (H3 uses fixed aperture 7)")
+    }
+    if (!identical(orientation, "standard") || !is.null(region)) {
+      stop("H3 fixes its own orientation; orientation applies to ISEA grids",
+           call. = FALSE)
+    }
+    if (projection != "isea") {
+      stop("H3 fixes its own projection; projection applies to ISEA grids",
+           call. = FALSE)
+    }
+    if (polyhedron != "icosahedron") {
+      stop("H3 is built on the icosahedron; polyhedron applies to ISEA grids",
+           call. = FALSE)
+    }
+    if (length(ellipsoid) != 0L) {
+      stop("H3 reads latitude on the sphere; ellipsoid applies to ISEA grids",
+           call. = FALSE)
     }
 
     # Validate: exactly one of area_km2 or resolution
@@ -175,10 +444,6 @@ hex_grid <- function(area_km2 = NULL,
       }
       # Find closest H3 resolution by area
       resolution <- closest_h3_resolution(area_km2, radius_km)
-      warning(sprintf(
-        "H3 cells are not exactly equal-area. Closest resolution %d has average area ~%.3f km^2 (requested %.3f km^2)",
-        resolution, h3_avg_area_km2(resolution, radius_km), area_km2
-      ))
     } else {
       if (!is.numeric(resolution) || length(resolution) != 1 || is.na(resolution)) {
         stop("resolution must be a single non-NA number")
@@ -188,12 +453,12 @@ hex_grid <- function(area_km2 = NULL,
         stop(sprintf("H3 resolution must be between %d and %d",
                      H3_MIN_RESOLUTION, H3_MAX_RESOLUTION))
       }
-      rlang::inform(
-        "H3 cells are not exactly equal-area; area varies ~3-5% by latitude.",
-        .frequency = "once",
-        .frequency_id = "hexify_h3_not_equal_area"
-      )
     }
+    rlang::inform(
+      "H3 cells are not exactly equal-area; hexagon area varies ~2x within a resolution.",
+      .frequency = "once",
+      .frequency_id = "hexify_h3_not_equal_area"
+    )
 
     if (radius_km != EARTH_RADIUS_KM) {
       rlang::inform(
@@ -208,7 +473,7 @@ hex_grid <- function(area_km2 = NULL,
     }
 
     actual_area <- h3_avg_area_km2(resolution, radius_km)
-    actual_diagonal <- sqrt(actual_area * 2 / sqrt(3))
+    actual_diagonal <- hex_spacing_km(actual_area)
 
     grid <- new("HexGridInfo",
                 aperture = "7",
@@ -217,13 +482,18 @@ hex_grid <- function(area_km2 = NULL,
                 diagonal_km = as.numeric(actual_diagonal),
                 crs = crs,
                 grid_type = "h3",
-                radius_km = radius_km)
+                radius_km = radius_km,
+                orientation = numeric(0),
+                projection = character(0),
+                polyhedron = character(0))
     return(grid)
   }
 
   # =========================================================================
-  # ISEA grid path (original logic)
+  # ISEA grid path
   # =========================================================================
+
+  check_projection_solid(projection, polyhedron)
 
   # -------------------------------------------------------------------------
   # Parse aperture: a single aperture, a family such as "4/3", or one aperture
@@ -234,12 +504,14 @@ hex_grid <- function(area_km2 = NULL,
   }
   aperture_str <- format_aperture(aperture, resolution)
 
-  if (is_mixed_aperture(aperture_str)) {
-    aperture_num <- NA_integer_
-  } else if (aperture_str %in% c("3", "4", "7")) {
-    aperture_num <- as.integer(aperture_str)
-  } else {
-    stop("Aperture must be 3, 4, 7, a family such as \"4/3\", or one aperture per level")
+  if (!is_mixed_aperture(aperture_str) &&
+      !aperture_str %in% as.character(c(VALID_APERTURES, HEX9_APERTURE))) {
+    stop("Aperture must be 3, 4, 7, 9 (Hex9), a family such as \"4/3\", or one aperture per level")
+  }
+  if (is_hex9_aperture(aperture_str) && polyhedron != "octahedron") {
+    stop("aperture 9 is Hex9, which is defined on the octahedron only: its cells ",
+         "follow a two-colouring of the faces that needs an even number of faces ",
+         "at every vertex", call. = FALSE)
   }
 
   # -------------------------------------------------------------------------
@@ -259,23 +531,8 @@ hex_grid <- function(area_km2 = NULL,
     if (!is.numeric(area_km2) || area_km2 <= 0) {
       stop("area_km2 must be a positive number")
     }
-
-    res_exact <- if (is_mixed_aperture(aperture_str)) {
-      calculate_resolution_for_area_mixed(area_km2, aperture_str, radius_km)
-    } else {
-      calculate_resolution_for_area(area_km2, aperture_num, radius_km)
-    }
-
-    # Apply rounding
-    resolution <- switch(resround,
-      "nearest" = round(res_exact),
-      "up" = ceiling(res_exact),
-      "down" = floor(res_exact),
-      stop("resround must be 'nearest', 'up', or 'down'")
-    )
-
-    # Clamp to valid range
-    resolution <- max(MIN_RESOLUTION, min(MAX_RESOLUTION, resolution))
+    resolution <- resolve_resolution_from_area(area_km2, aperture_str,
+                                               radius_km, resround, polyhedron)
   } else {
     if (!is.numeric(resolution) || length(resolution) != 1 || is.na(resolution)) {
       stop("resolution must be a single non-NA number")
@@ -285,19 +542,15 @@ hex_grid <- function(area_km2 = NULL,
       stop(sprintf("Resolution must be between %d and %d",
                    MIN_RESOLUTION, MAX_RESOLUTION))
     }
+    check_isea_resolution(aperture_str, resolution, polyhedron)
   }
 
   # -------------------------------------------------------------------------
   # Calculate actual area and diagonal for this resolution
   # -------------------------------------------------------------------------
-  n_cells <- aperture_n_cells(aperture_str, resolution)
-  actual_area <- body_surface_km2(radius_km) / n_cells
-  actual_diagonal <- sqrt(actual_area * 2 / sqrt(3))
-
-  # -------------------------------------------------------------------------
-  # Initialize icosahedron (required for C++ functions)
-  # -------------------------------------------------------------------------
-  cpp_build_icosa()
+  actual_area <- mean_cell_area_km2(aperture_str, resolution, radius_km,
+                                    polyhedron)
+  actual_diagonal <- hex_spacing_km(actual_area)
 
   # -------------------------------------------------------------------------
   # Create and validate HexGridInfo object
@@ -309,7 +562,12 @@ hex_grid <- function(area_km2 = NULL,
               diagonal_km = as.numeric(actual_diagonal),
               crs = crs,
               grid_type = "isea",
-              radius_km = radius_km)
+              radius_km = radius_km,
+              orientation = resolve_orientation(orientation, region, polyhedron,
+                                                if (length(ellipsoid)) ellipsoid[["f"]] else 0),
+              projection = projection,
+              polyhedron = polyhedron,
+              ellipsoid = ellipsoid)
 
   # Validation happens automatically via setValidity
   grid
@@ -326,7 +584,7 @@ hex_grid <- function(area_km2 = NULL,
 #'
 #' @param data Data frame or sf object (original user data, untouched)
 #' @param grid HexGridInfo object
-#' @param cell_id Numeric vector of cell IDs for each row
+#' @param cell_id Cell IDs for each row: integer64, or whole numbers below 2^53
 #' @param cell_center Matrix with columns lon, lat for cell centers
 #'
 #' @return A HexData object
@@ -353,11 +611,10 @@ new_hex_data <- function(data,
     colnames(cell_center) <- c("lon", "lat")
   }
 
-  # For ISEA grids, coerce to numeric; for H3, keep as character
   if (is_h3_grid(grid)) {
     cell_id <- as.character(cell_id)
   } else {
-    cell_id <- as.numeric(cell_id)
+    cell_id <- as_cell_id(cell_id)
   }
 
   new("HexData",
@@ -371,13 +628,8 @@ new_hex_data <- function(data,
 # TIBBLE COERCION (if tibble is available)
 # =============================================================================
 
-#' Convert HexData to tibble
-#'
-#' @param x A HexData object
-#' @param ... Additional arguments (ignored)
-#' @return A tibble
-#'
-#' @export
+#' @rdname HexData-class
+#' @exportS3Method tibble::as_tibble
 as_tibble.HexData <- function(x, ...) {
   if (!requireNamespace("tibble", quietly = TRUE)) {
     stop("Package 'tibble' is required for as_tibble(). ",
@@ -396,37 +648,15 @@ as_tibble.HexData <- function(x, ...) {
 # SF COERCION
 # =============================================================================
 
-#' Convert HexData to sf Object
-#'
-#' Converts a HexData object to an sf spatial features object. Can create
-#' either point geometries (cell centers) or polygon geometries (cell boundaries).
-#'
-#' @param x A HexData object
-#' @param geometry Type of geometry: "point" (default) or "polygon"
-#' @param ... Additional arguments (ignored)
-#'
-#' @return An sf object
-#'
-#' @details
-#' For point geometry, cell centers (cell_cen_lon, cell_cen_lat) are used.
-#' For polygon geometry, cell boundaries are computed using the grid specification.
-#'
+#' @rdname HexData-class
+#' @param geometry For \code{st_as_sf()}: "point" (default) gives each row
+#'   the centre of its cell, "polygon" the cell's boundary
+#' @param shape,depth Cell shape for polygon geometry and for \code{plot()},
+#'   as for \code{\link{cell_to_sf}}
 #' @export
-#' @examples
-#' df <- data.frame(lon = c(0, 10, 20), lat = c(45, 50, 55))
-#' result <- hexify(df, lon = "lon", lat = "lat", area_km2 = 1000)
-#'
-#' # Get sf points
-#' sf_pts <- as_sf(result)
-#'
-#' # Get sf polygons
-#' sf_poly <- as_sf(result, geometry = "polygon")
-as_sf <- function(x, geometry = c("point", "polygon"), ...) {
-  UseMethod("as_sf")
-}
-
-#' @export
-as_sf.HexData <- function(x, geometry = c("point", "polygon"), ...) {
+st_as_sf.HexData <- function(x, ..., geometry = c("point", "polygon"),
+                             shape = c("hexagon", "gosper", "descendants"),
+                             depth = 3L) {
   if (!requireNamespace("sf", quietly = TRUE)) {
     stop("Package 'sf' is required. Install with: install.packages('sf')")
   }
@@ -462,7 +692,8 @@ as_sf.HexData <- function(x, geometry = c("point", "polygon"), ...) {
     # Polygon geometry from cell boundaries
     unique_ids <- unique(x@cell_id)
 
-    polys_sf <- cell_to_sf(unique_ids, grid)
+    polys_sf <- cell_to_sf(unique_ids, grid, shape = match.arg(shape),
+                           depth = depth)
 
     # Add cell_id to data for merge
     data_with_id <- cbind(data, cell_id = x@cell_id)
@@ -473,34 +704,20 @@ as_sf.HexData <- function(x, geometry = c("point", "polygon"), ...) {
   }
 }
 
+#' @rdname HexGridInfo-class
 #' @export
-as_sf.default <- function(x, ...) {
-  stop("as_sf() is not defined for objects of class ", class(x)[1])
+st_as_sf.HexGridInfo <- function(x, ...) {
+  grid_global(x, ...)
 }
 
-#' Coordinate reference system of a grid
-#'
-#' Reads the CRS a grid's coordinates are in, as \code{sf::st_crs()} does for
-#' any spatial object. An Earth grid returns 'WGS84'; a grid built on another
-#' body returns a longlat CRS on the sphere of its radius.
-#'
-#' @param x A HexGridInfo or HexData object
-#' @param ... Passed on to \code{sf::st_crs()}
-#' @return An object of class \code{crs}, as \code{sf::st_crs()} returns:
-#'   a list carrying the reference system in 'PROJ' and 'WKT' form. It says how
-#'   to read the coordinates that the grid's cells, centres and sf exports come
-#'   back in.
-#'
+#' @rdname HexGridInfo-class
 #' @importFrom sf st_crs
 #' @export
-#' @examples
-#' st_crs(hex_grid(resolution = 5))
-#' st_crs(hex_grid(resolution = 5, radius_km = "mars"))
 st_crs.HexGridInfo <- function(x, ...) {
   grid_crs(x)
 }
 
-#' @rdname st_crs.HexGridInfo
+#' @rdname HexData-class
 #' @export
 st_crs.HexData <- function(x, ...) {
   grid_crs(x@grid)

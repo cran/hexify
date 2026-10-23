@@ -3,7 +3,7 @@
 #
 # This is the primary entry point for the hexify package.
 
-#' Assign hexagonal DGGS cell IDs to geographic points
+#' Assign Hexagonal DGGS Cell IDs to Geographic Points
 #'
 #' Takes a data.frame or sf object with geographic coordinates and returns
 #' a HexData object that stores the original data plus cell assignments.
@@ -16,8 +16,10 @@
 #' @param lon Column name for longitude (ignored if data is sf)
 #' @param lat Column name for latitude (ignored if data is sf)
 #' @param area_km2 Target cell area in km^2 (mutually exclusive with diagonal).
-#' @param diagonal Target cell diagonal (long diagonal) in km
-#' @param resolution Grid resolution (0-30). Alternative to area_km2.
+#' @param diagonal Target cell spacing in km: the short (flat-to-flat)
+#'   diagonal, equal to the distance between neighbouring cell centres
+#' @param resolution Grid resolution (0-30 for aperture 3, 0-29 for aperture 4, 0-21 for aperture 7
+#'   on the icosahedron). Alternative to area_km2.
 #' @param aperture Grid aperture: 3, 4, 7, a mixed family such as "4/3" or
 #'   "4/7", or one aperture per resolution level, e.g. \code{c(4, 4, 7, 3)}
 #'   (default 3)
@@ -29,7 +31,8 @@
 #'   \itemize{
 #'     \item \code{data}: The original input data (unchanged)
 #'     \item \code{grid}: The HexGridInfo specification
-#'     \item \code{cell_id}: Numeric vector of cell IDs for each row
+#'     \item \code{cell_id}: Cell IDs for each row (integer64 for ISEA, character
+#'       for H3)
 #'     \item \code{cell_center}: Matrix of cell center coordinates (lon, lat)
 #'   }
 #'
@@ -60,7 +63,7 @@
 #' @family hexify main
 #' @seealso \code{\link{hex_grid}} for grid specification,
 #'   \code{\link{HexData-class}} for return object details,
-#'   \code{\link{as_sf}} for converting to sf
+#'   \code{\link[=st_as_sf.HexData]{st_as_sf}} for converting to sf
 #' @export
 #' @examples
 #' # Simple data.frame
@@ -107,15 +110,7 @@ hexify <- function(data,
   # Extract or build grid specification
   # -------------------------------------------------------------------------
   if (!is.null(grid)) {
-    # Grid object provided - extract parameters
-    if (is_hex_grid(grid)) {
-      hex_grid_obj <- grid
-    } else if (inherits(grid, "hexify_grid")) {
-      # Legacy S3 grid object
-      hex_grid_obj <- hexify_grid_to_HexGridInfo(grid)
-    } else {
-      stop("grid must be a HexGridInfo object from hex_grid() or legacy hexify_grid")
-    }
+    hex_grid_obj <- extract_grid(grid)
   } else {
     # Build grid from parameters
     if (is.null(area_km2) && is.null(diagonal) && is.null(resolution)) {
@@ -127,7 +122,7 @@ hexify <- function(data,
 
     # Convert diagonal to area if provided
     if (!is.null(diagonal)) {
-      area_km2 <- diagonal^2 * sqrt(3) / 2
+      area_km2 <- hex_area_from_spacing(diagonal)
     }
 
     # Create HexGridInfo object (hex_grid handles aperture parsing)
@@ -150,17 +145,12 @@ hexify <- function(data,
       stop("Package 'sf' is required to process sf objects")
     }
 
-    # Get coordinates, transforming to WGS84 if needed. A missing CRS (not
-    # merely one without a mapped EPSG code) can't be transformed from, so
-    # treat it as already lon/lat rather than erroring; otherwise compare
-    # full CRS objects (not just $epsg, which is NA for many valid CRS built
-    # from WKT/proj4 strings) and transform when they differ.
-    data_crs <- sf::st_crs(data)
-    if (is.na(data_crs) || data_crs == sf::st_crs(4326)) {
-      coords_sf <- data
-    } else {
-      coords_sf <- sf::st_transform(data, 4326)
-    }
+    # The quantizer reads longitude and latitude on the grid's own body, so
+    # that is the frame the coordinates are put in: WGS84 for an Earth grid,
+    # and the body's own sphere elsewhere. Data carrying no CRS is taken as
+    # already being in it.
+    coords_sf <- geometry_in_crs(data, grid_crs(hex_grid_obj), "hexify",
+                                 "the data", "grid")
 
     coords <- sf::st_coordinates(coords_sf)
     lon_vec <- coords[, 1]
@@ -200,27 +190,8 @@ hexify <- function(data,
   # -------------------------------------------------------------------------
   # Perform hexification
   # -------------------------------------------------------------------------
-  aperture_str <- hex_grid_obj@aperture
-  res <- hex_grid_obj@resolution
-
-  if (is_h3_grid(hex_grid_obj)) {
-    # H3 path: use native C backend
-    cell_ids <- cpp_h3_latLngToCell(lon_vec, lat_vec, res)
-    center_df <- cpp_h3_cellToLatLng(cell_ids)
-    centers <- list(lon_deg = center_df$lon, lat_deg = center_df$lat)
-  } else if (is_mixed_aperture(aperture_str)) {
-    ap_seq <- parse_aperture_seq(aperture_str, res)
-    cell_ids <- cpp_lonlat_to_cell_seq(lon_vec, lat_vec, ap_seq)
-    centers <- cpp_cell_to_lonlat_seq(cell_ids, ap_seq)
-  } else {
-    aperture_num <- match(aperture_str, c("3", "4", "7"))
-    if (is.na(aperture_num)) {
-      stop(sprintf("unexpected aperture value '%s' in grid object", aperture_str))
-    }
-    aperture_num <- c(3L, 4L, 7L)[aperture_num]
-    cell_ids <- cpp_lonlat_to_cell(lon_vec, lat_vec, res, aperture_num)
-    centers <- cpp_cell_to_lonlat(cell_ids, res, aperture_num)
-  }
+  cell_ids <- lonlat_to_cell(lon_vec, lat_vec, hex_grid_obj)
+  centers <- cell_to_lonlat(cell_ids, hex_grid_obj)
 
   # Build cell center matrix
   cell_center <- matrix(

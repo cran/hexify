@@ -18,11 +18,11 @@
 #'
 #' @details
 #' Requires the `leaflet` package (in Suggests). The map is built using
-#' [as_sf()] to generate polygon geometries, then rendered as a leaflet
+#' [st_as_sf()] to generate polygon geometries, then rendered as a leaflet
 #' choropleth.
 #'
 #' @seealso [hexify_heatmap()] for static ggplot2 maps,
-#'   [as_sf()] for sf conversion
+#'   [st_as_sf()] for sf conversion
 #'
 #' @export
 #' @examples
@@ -47,7 +47,7 @@ hex_browse <- function(hex_data, grid = NULL, value = NULL,
   # Get grid and cell data
 
   if (is_hex_data(hex_data)) {
-    g <- hex_data@grid
+    g <- extract_grid(hex_data)
 
     # Aggregate to unique cells
     df <- as.data.frame(hex_data)
@@ -109,7 +109,7 @@ hex_browse <- function(hex_data, grid = NULL, value = NULL,
 
   # Build popup text
   popup_text <- paste0(
-    "<b>Cell ID:</b> ", cell_ids, "<br>",
+    "<b>Cell ID:</b> ", as.character(cell_ids), "<br>",
     "<b>Center:</b> (",
     round(cell_df$cell_cen_lon, 4), ", ",
     round(cell_df$cell_cen_lat, 4), ")<br>"

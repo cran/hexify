@@ -109,78 +109,29 @@ resolve_point_size <- function(size, hex_sf, xlim, ylim) {
 
 #' Jitter points within their assigned hexagon cells
 #' @param cell_ids Vector of cell IDs (one per point)
-#' @param hex_sf sf object with cell polygons (must have cell_id column)
-#' @param jitter If TRUE (default), randomly scatter points within their
-#'   cell. If FALSE, place every point at its cell's centroid.
-#' @return Data frame with lon, lat columns for jittered positions
+#' @param grid The grid the cells belong to
+#' @param jitter If TRUE (default), place each point at a random position in
+#'   its cell. If FALSE, place every point at its cell's centre.
+#' @return Data frame with lon, lat columns, NA for a point without a cell
 #' @noRd
-jitter_points_in_cells <- function(cell_ids, hex_sf, jitter = TRUE) {
-  n_points <- length(cell_ids)
-
-  # Pre-allocate result
-  result <- data.frame(
-    lon = numeric(n_points),
-    lat = numeric(n_points)
-  )
-
-  # Disable S2 for sampling (simpler planar sampling in small hexagons)
-  s2_state <- sf::sf_use_s2()
-  suppressMessages(sf::sf_use_s2(FALSE))
-  on.exit(invisible(suppressMessages(sf::sf_use_s2(s2_state))), add = TRUE)
-
-  # Group points by cell
-  cell_groups <- split(seq_along(cell_ids), cell_ids)
-
-  # Determine if cell_ids are character (H3) or numeric (ISEA)
-  h3_mode <- is.character(hex_sf$cell_id)
-
-  for (cell_id_str in names(cell_groups)) {
-    cell_id_val <- if (h3_mode) cell_id_str else as.numeric(cell_id_str)
-    indices <- cell_groups[[cell_id_str]]
-    n_in_cell <- length(indices)
-
-    # Get the polygon for this cell
-    poly_idx <- which(hex_sf$cell_id == cell_id_val)
-    if (length(poly_idx) == 0) next
-
-    poly <- hex_sf[poly_idx, ]
-
-    # Sample random points inside the polygon (or none, if jitter = FALSE,
-    # so every point in the cell falls back to the centroid below)
-    sampled <- if (jitter) {
-      suppressMessages(suppressWarnings(
-        sf::st_sample(poly, size = n_in_cell, type = "random")
-      ))
-    } else {
-      sf::st_sfc()
-    }
-
-    # If sampling failed or returned wrong count, use centroid
-    if (length(sampled) == 0) {
-      centroid <- suppressMessages(suppressWarnings(
-        sf::st_centroid(sf::st_geometry(poly))
-      ))
-      coords <- sf::st_coordinates(centroid)
-      result$lon[indices] <- coords[1, 1]
-      result$lat[indices] <- coords[1, 2]
-    } else {
-      coords <- sf::st_coordinates(sampled)
-      # Handle case where we got fewer points than expected
-      if (nrow(coords) < n_in_cell) {
-        # Pad with centroid
-        centroid <- suppressMessages(suppressWarnings(
-          sf::st_centroid(sf::st_geometry(poly))
-        ))
-        centroid_coords <- sf::st_coordinates(centroid)
-        n_missing <- n_in_cell - nrow(coords)
-        coords <- rbind(coords, matrix(rep(centroid_coords, n_missing),
-                                        ncol = 2, byrow = TRUE))
-      }
-      result$lon[indices] <- coords[1:n_in_cell, 1]
-      result$lat[indices] <- coords[1:n_in_cell, 2]
-    }
+jitter_points_in_cells <- function(cell_ids, grid, jitter = TRUE) {
+  result <- data.frame(lon = rep(NA_real_, length(cell_ids)),
+                       lat = rep(NA_real_, length(cell_ids)))
+  ok <- which(!is.na(cell_ids))
+  if (length(ok) == 0L) return(result)
+  if (!jitter) {
+    ctr <- cell_to_lonlat(cell_ids[ok], grid)
+    result$lon[ok] <- ctr$lon_deg
+    result$lat[ok] <- ctr$lat_deg
+    return(result)
   }
-
+  # Points of one cell take that cell's samples in turn
+  cells <- unique(cell_ids[ok])
+  key <- match(cell_ids[ok], cells)
+  pts <- hex_sample(cells, grid, n = tabulate(key, nbins = length(cells)))
+  slot <- order(key)
+  result$lon[ok[slot]] <- pts$lon
+  result$lat[ok[slot]] <- pts$lat
   result
 }
 
@@ -188,18 +139,21 @@ jitter_points_in_cells <- function(cell_ids, hex_sf, jitter = TRUE) {
 # BASE R PLOT METHOD
 # =============================================================================
 
-#' Plot HexData objects
+#' @rdname HexData-class
+#' @section Plotting data:
+#' \code{plot()} draws the cells the data falls in, with an optional basemap.
+#' It builds polygons for the cells present in the data when it draws them,
+#' rather than storing them, to keep memory use low.
 #'
-#' Default plot method for HexData objects. Draws hexagonal grid cells
-#' with an optional basemap.
-#'
-#' @param x A HexData object from \code{hexify()}
 #' @param y Ignored (for S4 method compatibility)
 #' @param basemap Basemap specification:
 #'   \itemize{
 #'     \item \code{TRUE} or \code{"world"}: Use built-in world map
 #'     \item \code{FALSE} or \code{NULL}: No basemap
-#'     \item sf object: Custom basemap
+#'     \item \code{"world_hires"}: High-resolution map from 'rnaturalearth'
+#'       (requires the package)
+#'     \item An sf object: User-supplied vector map
+#'     \item A SpatRaster: User-supplied raster, drawn in grayscale
 #'   }
 #' @param clip_basemap Clip basemap to data extent (default TRUE). Clipping
 #'   temporarily disables S2 spherical geometry to avoid edge-crossing errors.
@@ -228,14 +182,6 @@ jitter_points_in_cells <- function(cell_ids, hex_sf, jitter = TRUE) {
 #' @param crop Crop to data extent (default TRUE)
 #' @param crop_expand Expansion factor for crop (default 0.1)
 #' @param main Plot title
-#' @param ... Additional arguments passed to base plot()
-#'
-#' @return Invisibly returns the HexData object
-#'
-#' @details
-#' This function generates polygon geometries for the cells present in
-#' the data and plots them. Polygons are computed on demand, not stored,
-#' to minimize memory usage.
 #'
 #' @seealso \code{\link{hexify_heatmap}} for ggplot2 plotting
 #'
@@ -271,30 +217,19 @@ setMethod("plot", signature(x = "HexData", y = "missing"),
            crop = TRUE,
            crop_expand = 0.1,
            main = NULL,
+           shape = c("hexagon", "gosper", "descendants"),
+           depth = 3L,
            ...) {
 
     if (!requireNamespace("sf", quietly = TRUE)) {
       stop("Package 'sf' is required for plotting")
     }
 
-    # Get grid spec
-    g <- x@grid
-
-    # Generate cell polygons
-    unique_cells <- unique(x@cell_id)
-    hex_sf <- cell_to_sf(unique_cells, g)
-
-    # If fill column specified, merge data
-    if (!is.null(fill)) {
-      if (!fill %in% names(x@data)) {
-        stop(sprintf("Column '%s' not found in data", fill))
-      }
-      # Create data frame with cell_id for merging
-      data_with_id <- cbind(x@data, cell_id = x@cell_id)
-      # Aggregate by cell if needed (take first value)
-      agg_data <- data_with_id[!duplicated(data_with_id$cell_id), c("cell_id", fill)]
-      hex_sf <- merge(hex_sf, agg_data, by = "cell_id", all.x = TRUE)
+    if (!is.null(fill) && !fill %in% names(x@data)) {
+      stop(sprintf("Column '%s' not found in data", fill))
     }
+    hex_sf <- hex_data_cells_sf(x, columns = if (is.null(fill)) character(0) else fill,
+                                shape = match.arg(shape), depth = depth)
 
     # Calculate bounding box
     hex_bbox <- sf::st_bbox(hex_sf)
@@ -316,12 +251,9 @@ setMethod("plot", signature(x = "HexData", y = "missing"),
     asp <- 1 / cos(mean_lat * pi / 180)
 
     # Resolve basemap
-    basemap_sf <- NULL
-    if (isTRUE(basemap) || identical(basemap, "world")) {
-      basemap_sf <- hexify_world
-    } else if (inherits(basemap, c("sf", "sfc"))) {
-      basemap_sf <- basemap
-    }
+    basemap_info <- resolve_basemap(basemap)
+    basemap_sf <- basemap_info$sf
+    basemap_raster <- basemap_info$raster
 
     # Initialize plot
     plot(xlim, ylim, type = "n",
@@ -329,13 +261,21 @@ setMethod("plot", signature(x = "HexData", y = "missing"),
          xlab = "Longitude", ylab = "Latitude",
          asp = asp, main = main, ...)
 
+    # Draw raster basemap in grayscale
+    if (!is.null(basemap_raster)) {
+      rast_layer <- basemap_raster[[1]]
+      if (isFALSE(terra::is.lonlat(rast_layer))) {
+        rast_layer <- terra::project(rast_layer, "EPSG:4326")
+      }
+      terra::plot(rast_layer, add = TRUE, legend = FALSE,
+                  col = grDevices::gray.colors(64, start = 0.2, end = 0.95))
+    }
+
     # Draw basemap
     if (!is.null(basemap_sf)) {
       if (clip_basemap) {
         # Disable S2 for clipping to avoid spherical geometry edge-crossing errors
-        s2_state <- sf::sf_use_s2()
-        suppressMessages(sf::sf_use_s2(FALSE))
-        on.exit(sf::sf_use_s2(s2_state), add = TRUE)
+        local_s2(FALSE)
 
         # Clip basemap to extent
         clip_box <- sf::st_bbox(c(xmin = unname(xlim[1]),
@@ -349,7 +289,7 @@ setMethod("plot", signature(x = "HexData", y = "missing"),
           sf::st_intersection(sf::st_make_valid(basemap_sf), clip_poly)
         ))
 
-        if (nrow(basemap_clipped) > 0) {
+        if (length(sf::st_geometry(basemap_clipped)) > 0) {
           plot(sf::st_geometry(basemap_clipped),
                col = basemap_fill, border = basemap_border,
                lwd = basemap_lwd, add = TRUE)
@@ -399,8 +339,8 @@ setMethod("plot", signature(x = "HexData", y = "missing"),
       # Resolve point size based on hex cell size
       cex <- resolve_point_size(point_size, hex_sf, xlim, ylim)
 
-      # Jitter points within their hexagon (or centroid-snap if jitter = FALSE)
-      jittered <- jitter_points_in_cells(x@cell_id, hex_sf, jitter = jitter)
+      # Jitter points within their hexagon (or place them at its centre if jitter = FALSE)
+      jittered <- jitter_points_in_cells(x@cell_id, extract_grid(x), jitter = jitter)
 
       points(jittered$lon, jittered$lat,
              pch = 19, cex = cex,
@@ -418,7 +358,7 @@ setMethod("plot", signature(x = "HexData", y = "missing"),
 # PLOT GRID CLIPPED TO BOUNDARY
 # =============================================================================
 
-#' Plot hexagonal grid clipped to a polygon boundary
+#' Plot Hexagonal Grid Clipped to a Polygon Boundary
 #'
 #' A convenience function that creates a grid, clips it to a boundary polygon,
 #' and plots the result in a single call.
@@ -449,8 +389,12 @@ setMethod("plot", signature(x = "HexData", y = "missing"),
 #' @export
 #' @examples
 #' \donttest{
-#' # Plot grid over France
-#' france <- hexify_world[hexify_world$name == "France", ]
+#' # Metropolitan France: the world map also carries the overseas departements,
+#' # and grid_clip() covers the bounding box of whatever it is given.
+#' france <- sf::st_crop(
+#'   sf::st_geometry(hexify_world[hexify_world$name == "France", ]),
+#'   c(xmin = -5, ymin = 41, xmax = 10, ymax = 52)
+#' )
 #' grid <- hex_grid(area_km2 = 2000)
 #' plot_grid(france, grid)
 #'

@@ -3,7 +3,7 @@
 //
 // Implements hierarchical space-filling indexing for aperture-7 hex subdivision.
 // Each parent hex subdivides into 7 children (1 center + 6 surrounding).
-// The index string encodes the traversal path from the base cell to the target.
+// The index encodes the traversal path from the base cell to the target.
 //
 // Mathematical basis:
 // - Aperture-7 scaling rotates ~19.1° (arctan(sqrt(3)/5)) and scales by sqrt(7)
@@ -12,44 +12,90 @@
 //
 // References:
 // - Sahr, White, Kimerling (2003) "Geodesic Discrete Global Grid Systems"
+// - Sahr (2019) "Central Place Indexing", Cartographica 54(1): 16-29
+// - Kmoch, Sahr, Chan, Uuemaa (2025) "IGEO7", AGILE: GIScience Series 6
 // - H3 Coordinate Systems (h3geo.org/docs/core-library/coordsystems)
-// - Red Blob Games "Hexagonal Grids" (cube coordinates)
 //
 // Copyright (c) 2024-2025 hexify authors. MIT License.
 
 #pragma once
 
 #include "ijk_coordinates.h"
+#include "constants.h"
+#include <cstdint>
 #include <string>
 
 namespace hexify {
 namespace z7 {
 
-// Base cell adjacency tables derived from icosahedral topology.
-// The icosahedron has 12 vertices; each base cell corresponds to one vertex.
-// adjacentBaseCellTable[cell][dir] gives the adjacent cell in direction dir.
-// Directions: 0=self, 1=edge1, 2=edge2, 3=edge3 (varies by hemisphere)
-extern const int adjacentBaseCellTable[12][4];
+typedef IVec3D::Direction Digit;
 
-// Inverse adjacency for decoding: maps encoded cell back to original quad
-extern const int inverseAdjacentBaseCellTable[12][2];
+// IGEO7's packed form holds 20 three-bit digits below a four-bit base cell.
+constexpr int kMaxPackedRes = 20;
 
+// The deepest resolution whose monotonic IDs fit in a signed 64-bit integer:
+// 12 * 7^21 < 2^63 < 12 * 7^22.
+constexpr int kMaxMonotonicRes = 21;
+
+// A cell's aperture-7 label: the leading field and one digit 0-6 per
+// resolution. On the icosahedron the leading field is the IGEO7 base cell
+// (0-11), the pentagon the cell descends from, and the digits are read in that
+// base cell's frame. On other solids it is quad + n * seed, n the solid's
+// number of quads and seed the unit digit the hierarchy walk arrives at.
+struct Label {
+    int lead;
+    int res;
+    Digit digit[kMaxResolution + 2];  // digit[1..res]
+};
+
+// Whether the active solid carries IGEO7 labels (the icosahedron).
+bool igeo7_labels();
+
+// The label of a cell given as its quad and Class I substrate (i, j).
+Label label_of(int quadNum, long long i, long long j, int resolution);
+
+// The quad and Class I substrate (i, j) a label names.
+void cell_of(const Label& label, int& quadNum, long long& i, long long& j);
+
+// Z7 string: the leading field as two decimal digits, then the digits.
+std::string to_string(const Label& label);
+Label from_string(const std::string& index);
+
+// IGEO7's 64-bit integer: base cell in bits 63-60, digit r in bits
+// 59 - 3(r - 1) to 57 - 3(r - 1), digit 7 at every level below the cell's
+// resolution. Defined on the icosahedron up to resolution 20.
+uint64_t to_packed(const Label& label);
+
+// The label of a packed index; false unless `z` is one: base cell 0-11 and a
+// run of digits 0-6 followed only by 7s.
+bool from_packed(uint64_t z, Label& out);
+
+// The monotonic ID: base * 7^r plus the digits read as a base-7 number, up to
+// kMaxMonotonicRes. It counts the deleted subsequences of the pentagons too,
+// so within one resolution it is increasing in the Z7 order and leaves holes.
+uint64_t to_monotonic(const Label& label);
+
+// The label of a monotonic ID at a resolution; false if its base passes 11.
+bool from_monotonic(uint64_t m, int resolution, Label& out);
+
+// The neighbour one step from an IGEO7 label in direction `dir` (1-6) of its
+// base cell's frame, by digit arithmetic: false for a pentagon's deleted
+// direction, where it has no neighbour.
+bool neighbor(const Label& in, Digit dir, Label& out);
+
+// Aperture-7 hierarchical index string of a cell given as its quad and Class I
+// substrate (i, j): to_string(label_of(...)).
 std::string encode(int quadNum, long long i, long long j, int resolution);
 
-void decode(const std::string& z7_str, int resolution,
-            int& quadNum, long long& i, long long& j);
+// The inverse of encode(): the quad and Class I substrate (i, j) of an index.
+// The resolution is the number of digits after the leading field.
+void decode(const std::string& index, int& quadNum, long long& i, long long& j);
 
-// Bijective aperture-7 hierarchical index (hexify-native). Keeps the quad fixed
-// (no DGGRID base-cell reassignment / pentagon skip), so every (quad, i, j)
-// round-trips. The leading field is quad + 12 * seed, seed being the unit digit
-// the hierarchy walk arrives at; it is the plain two-digit quad DGGRID writes
-// for a cell whose whole ancestry lies inside its quad, and about two cells in
-// three sit on a quad boundary and carry a nonzero seed instead. (i,j) are
-// Class I substrate.
-std::string encode_bijective(int quadNum, long long i, long long j, int resolution);
-
-void decode_bijective(const std::string& index, int resolution,
-                      int& quadNum, long long& i, long long& j);
+// Whether an IGEO7 label lies in the subsequence a pentagon deletes: its first
+// nonzero digit is the direction its base cell lacks. Such a label names no
+// cell. Always false on solids without IGEO7 labels.
+bool in_deleted_subsequence(const Label& label);
+bool in_deleted_subsequence(const std::string& index);
 
 // Get the canonical form of a Z7 index
 // Finds the lexicographically smallest index in the cycle

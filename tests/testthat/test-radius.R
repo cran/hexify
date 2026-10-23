@@ -120,7 +120,8 @@ test_that("cells and centres are the same on every body", {
 test_that("cell_area reports the body's cell area", {
   mars <- hex_grid(resolution = 5, radius_km = "mars")
   cells <- lonlat_to_cell(c(0, 30), c(0, 40), mars)
-  expect_equal(unname(cell_area(cells, mars)), rep(mars@area_km2, 2))
+  n <- hexify:::aperture_n_cells(mars@aperture, mars@resolution)
+  expect_equal(unname(cell_area(cells, mars)), rep(MARS_SURFACE_KM2 / (n - 2), 2))
 })
 
 # =============================================================================
@@ -188,7 +189,9 @@ test_that("hexify() passes a radius through to the grid", {
 
   expect_equal(hexify:::grid_radius_km(hd@grid), MARS_RADIUS_KM)
   expect_equal(as.data.frame(hd)$cell_area_km2,
-               rep(hd@grid@area_km2, 3))
+               unname(cell_area(hd@cell_id, hd@grid)))
+  expect_equal(hd@grid@area_km2, MARS_SURFACE_KM2 /
+                 hexify:::aperture_n_cells(hd@grid@aperture, hd@grid@resolution))
 
   earth <- hexify(df, lon = "lon", lat = "lat", resolution = 5)
   expect_equal(hd@cell_id, earth@cell_id)
@@ -299,7 +302,10 @@ test_that("h3_crosswalk needs both grids on the same body", {
 
   cells <- lonlat_to_cell(c(0, 10), c(45, 50), mars_isea)
   xw <- h3_crosswalk(cells, mars_isea, direction = "isea_to_h3")
-  expect_equal(xw$isea_area_km2, rep(mars_isea@area_km2, nrow(xw)))
+  expect_equal(xw$isea_area_km2, unname(cell_area(xw$isea_cell_id, mars_isea)))
+  expect_equal(xw$isea_area_km2,
+               rep(body_surface_km2(grid_radius_km(mars_isea)) /
+                     (n_cells(mars_isea) - 2), nrow(xw)))
   expect_equal(xw$area_ratio, xw$isea_area_km2 / xw$h3_area_km2)
 
   h3_cells <- lonlat_to_cell(c(0, 10), c(45, 50), mars_h3)
@@ -385,12 +391,12 @@ test_that("sf output carries the grid's own CRS", {
 
   df <- data.frame(lon = c(0, 10), lat = c(45, 50))
   hd <- hexify(df, lon = "lon", lat = "lat", grid = mars)
-  expect_equal(sf::st_crs(as_sf(hd)), sf::st_crs(hexify:::grid_crs(mars)))
+  expect_equal(sf::st_crs(st_as_sf(hd)), sf::st_crs(hexify:::grid_crs(mars)))
 })
 
 test_that("a grid prints its CRS in either form", {
-  expect_output(show(hex_grid(resolution = 5)), "CRS: +EPSG:4326")
-  expect_output(show(hex_grid(resolution = 5, radius_km = "mars")),
+  expect_output(print(summary(hex_grid(resolution = 5))), "CRS: +EPSG:4326")
+  expect_output(print(summary(hex_grid(resolution = 5, radius_km = "mars"))),
                 "CRS: +[+]proj=longlat")
 })
 

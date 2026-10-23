@@ -14,6 +14,17 @@ source("_common.R")
 library(hexify)
 ```
 
+## Installation
+
+```r
+install.packages("hexify")
+
+# Development version
+# pak::pak("gcol33/hexify")
+
+library(hexify)
+```
+
 ```{r cover-image, echo=FALSE, message=FALSE, warning=FALSE, fig.width=7, fig.height=3.5, fig.align='center'}
 # Generate cover image: multi-resolution grids over different regions
 library(sf)
@@ -85,10 +96,10 @@ cells(result)
 n_cells(result)
 
 # Access all cell IDs (one per row)
-result@cell_id
+result$cell_id
 
 # Access cell centers
-head(result@cell_center)
+head(as.data.frame(result)[c("cell_cen_lon", "cell_cen_lat")])
 
 # Extract original data as data.frame
 head(as.data.frame(result))
@@ -158,7 +169,6 @@ birds_hex <- hexify(birds, lon = "lon", lat = "lat", grid = grid)
 
 # Extract data with cell IDs
 birds_gridded <- as.data.frame(birds_hex)
-birds_gridded$cell_id <- birds_hex@cell_id
 
 # Count observations per cell
 obs_counts <- aggregate(
@@ -198,7 +208,7 @@ ggplot() +
   labs(
     title = "Bird Observations in Equal-Area Cells",
     subtitle = sprintf("ISEA3H grid at resolution %d (~%.0f km² cells)",
-                       grid@resolution, grid@area_km2)
+                       summary(grid)$resolution, summary(grid)$area_km2)
   ) +
   theme_minimal(base_size = FIG_BASE_SIZE) +
   theme(
@@ -241,9 +251,9 @@ hexify uses two S4 classes to make spatial workflows clean and error-free:
 | Slot | Type | Description |
 |------|------|-------------|
 | `aperture` | character | Grid aperture ("3", "4", "7", or "4/3") |
-| `resolution` | integer | Resolution level (0-30) |
+| `resolution` | integer | Resolution level (0-30 for aperture 3, 0-29 for aperture 4, 0-21 for aperture 7) |
 | `area_km2` | numeric | Cell area in km² |
-| `diagonal_km` | numeric | Cell diagonal in km |
+| `diagonal_km` | numeric | Cell centre spacing (short diagonal) in km |
 | `crs` | integer or character | EPSG code, or a PROJ or WKT string |
 | `grid_type` | character | Backend: `"isea"` or `"h3"` |
 

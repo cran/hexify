@@ -185,23 +185,36 @@ test_that("prepare_fill_column applies breaks to continuous data", {
   expect_true(result$is_discrete)
 })
 
-test_that("resolve_basemap returns NULL for NULL input", {
-  result <- hexify:::resolve_basemap(NULL)
-  expect_null(result)
+test_that("resolve_basemap returns empty parts for NULL and FALSE", {
+  for (spec in list(NULL, FALSE)) {
+    result <- hexify:::resolve_basemap(spec)
+
+    expect_type(result, "list")
+    expect_true("sf" %in% names(result))
+    expect_true("raster" %in% names(result))
+    expect_null(result$sf)
+    expect_null(result$raster)
+  }
 })
 
-test_that("resolve_basemap returns hexify_world for 'world'", {
+test_that("resolve_basemap returns hexify_world for 'world' and TRUE", {
   skip_if_not_installed("sf")
 
-  result <- hexify:::resolve_basemap("world")
-  expect_s3_class(result, "sf")
+  for (spec in list("world", TRUE)) {
+    result <- hexify:::resolve_basemap(spec)
+
+    expect_s3_class(result$sf, "sf")
+    expect_null(result$raster)
+  }
 })
 
 test_that("resolve_basemap returns sf for sf input", {
   skip_if_not_installed("sf")
 
   result <- hexify:::resolve_basemap(hexify_world)
-  expect_s3_class(result, "sf")
+
+  expect_s3_class(result$sf, "sf")
+  expect_null(result$raster)
 })
 
 test_that("resolve_basemap errors on invalid input", {
@@ -209,50 +222,20 @@ test_that("resolve_basemap errors on invalid input", {
   expect_error(hexify:::resolve_basemap("invalid"), "basemap must be")
 })
 
-test_that("resolve_basemap_with_raster returns correct structure", {
-  result <- hexify:::resolve_basemap_with_raster(NULL)
-
-  expect_type(result, "list")
-  expect_true("sf" %in% names(result))
-  expect_true("raster" %in% names(result))
-  expect_null(result$sf)
-  expect_null(result$raster)
-})
-
-test_that("resolve_basemap_with_raster handles world basemap", {
-  result <- hexify:::resolve_basemap_with_raster("world")
-
-  expect_s3_class(result$sf, "sf")
-  expect_null(result$raster)
-})
-
-test_that("resolve_basemap_with_raster handles sf input", {
-  skip_if_not_installed("sf")
-
-  result <- hexify:::resolve_basemap_with_raster(hexify_world)
-
-  expect_s3_class(result$sf, "sf")
-  expect_null(result$raster)
-})
-
-test_that("resolve_basemap_with_raster errors on invalid input", {
-  expect_error(hexify:::resolve_basemap_with_raster(123), "basemap must be")
-})
-
-test_that("resolve_basemap_with_raster handles SpatRaster input", {
+test_that("resolve_basemap handles SpatRaster input", {
   skip_if_not_installed("terra")
 
   r <- terra::rast(nrows = 5, ncols = 5, xmin = -10, xmax = 10, ymin = 40, ymax = 55)
   terra::values(r) <- seq_len(25)
 
-  result <- hexify:::resolve_basemap_with_raster(r)
+  result <- hexify:::resolve_basemap(r)
 
   expect_null(result$sf)
   expect_s4_class(result$raster, "SpatRaster")
   expect_identical(result$raster, r)
 })
 
-test_that("resolve_basemap_with_raster handles RasterLayer input", {
+test_that("resolve_basemap converts RasterLayer input to SpatRaster", {
   skip_if_not_installed("raster")
   skip_if_not_installed("terra")
 
@@ -260,10 +243,10 @@ test_that("resolve_basemap_with_raster handles RasterLayer input", {
   terra::values(r) <- seq_len(25)
   r_legacy <- raster::raster(r)
 
-  result <- hexify:::resolve_basemap_with_raster(r_legacy)
+  result <- hexify:::resolve_basemap(r_legacy)
 
   expect_null(result$sf)
-  expect_s4_class(result$raster, "RasterLayer")
+  expect_s4_class(result$raster, "SpatRaster")
 })
 
 test_that("hexify_heatmap renders a SpatRaster basemap as an annotation layer", {
@@ -289,25 +272,39 @@ test_that("hexify_heatmap renders a SpatRaster basemap as an annotation layer", 
   expect_true(any(grepl("Custom|Annotation|Raster", raster_layer_geoms)))
 })
 
-test_that("prepare_hex_sf_simple validates input", {
-  expect_error(
-    hexify:::prepare_hex_sf_simple(data.frame(x = 1), aperture = 3),
-    "HexData object or an sf object"
-  )
+test_that("hexify_heatmap renders a legacy RasterLayer basemap", {
+  skip_if_not_installed("raster")
+  skip_if_not_installed("terra")
+  skip_if_not_installed("sf")
+  skip_if_not_installed("ggplot2")
 
-  expect_error(
-    hexify:::prepare_hex_sf_simple(data.frame(cell_id = 1), aperture = 3),
-    "cell_area"
-  )
+  r <- terra::rast(nrows = 10, ncols = 10, xmin = -10, xmax = 10, ymin = 40, ymax = 55,
+                    crs = "EPSG:4326")
+  terra::values(r) <- runif(100)
+  r_legacy <- raster::raster(r)
+
+  df <- data.frame(lon = c(2.35, 4.90), lat = c(48.86, 52.37))
+  result <- hexify(df, lon = "lon", lat = "lat", area_km2 = 10000)
+
+  p_with_raster <- hexify_heatmap(result, basemap = r_legacy)
+  p_without <- hexify_heatmap(result)
+
+  expect_s3_class(p_with_raster, "ggplot")
+  expect_gt(length(p_with_raster$layers), length(p_without$layers))
 })
 
-test_that("prepare_hex_sf_simple passes through sf objects", {
+test_that("hexify_heatmap accepts the world_hires basemap", {
+  skip_if_not_installed("rnaturalearth")
+  skip_if_not_installed("rnaturalearthdata")
   skip_if_not_installed("sf")
+  skip_if_not_installed("ggplot2")
 
-  hex_sf <- hexify_cell_to_sf(c(12847), resolution = 10, aperture = 3)
-  result <- hexify:::prepare_hex_sf_simple(hex_sf, aperture = 3)
+  df <- data.frame(lon = c(2.35, 4.90), lat = c(48.86, 52.37))
+  result <- hexify(df, lon = "lon", lat = "lat", area_km2 = 10000)
 
-  expect_s3_class(result, "sf")
+  p <- hexify_heatmap(result, basemap = "world_hires")
+
+  expect_s3_class(p, "ggplot")
 })
 
 test_that("prepare_hex_sf validates input", {
@@ -788,11 +785,11 @@ test_that("resolve_basemap handles world_hires without package", {
   )
 })
 
-test_that("resolve_basemap_with_raster handles sfc input", {
+test_that("resolve_basemap handles sfc input", {
   skip_if_not_installed("sf")
 
   sfc <- sf::st_sfc(sf::st_point(c(0, 0)), crs = 4326)
-  result <- hexify:::resolve_basemap_with_raster(sfc)
+  result <- hexify:::resolve_basemap(sfc)
 
   expect_s3_class(result$sf, "sfc")
   expect_null(result$raster)
@@ -809,4 +806,95 @@ test_that("hexify_heatmap handles data with NA CRS", {
 
   result <- hexify_heatmap(hex_sf, value = "count")
   expect_s3_class(result, "ggplot")
+})
+
+# =============================================================================
+# Palette resolution
+# =============================================================================
+
+test_that("brewer_colors matches brewer.pal over the range it defines", {
+  skip_if_not_installed("RColorBrewer")
+
+  for (n in 3:9) {
+    expect_equal(hexify:::brewer_colors("YlOrRd", n),
+                 RColorBrewer::brewer.pal(n, "YlOrRd"),
+                 info = sprintf("%d levels", n))
+  }
+})
+
+test_that("brewer_colors gives one colour per level outside that range", {
+  skip_if_not_installed("RColorBrewer")
+
+  # YlOrRd holds nine; a binned scale can ask for more or fewer
+  for (n in c(1, 2, 10, 12, 30)) {
+    colours <- hexify:::brewer_colors("YlOrRd", n)
+    expect_length(colours, n)
+    expect_true(all(grepl("^#[0-9A-Fa-f]{6}$", colours)),
+                info = sprintf("%d levels", n))
+  }
+
+  # The ends of the palette are kept when interpolating past its length
+  wide <- hexify:::brewer_colors("YlOrRd", 12)
+  full <- RColorBrewer::brewer.pal(9, "YlOrRd")
+  expect_equal(wide[1], full[1])
+  expect_equal(wide[12], full[9])
+})
+
+test_that("a binned brewer scale takes more bins than the palette holds", {
+  skip_if_not_installed("sf")
+  skip_if_not_installed("ggplot2")
+  skip_if_not_installed("RColorBrewer")
+
+  df <- data.frame(
+    cell_id = c(12847, 12532, 12533),
+    cell_area = rep(863.94, 3),
+    count = c(1, 20, 40)
+  )
+
+  # Twelve bins against a nine-colour palette
+  breaks <- seq(0, 48, length.out = 13)
+  expect_no_error(
+    hexify_heatmap(df, value = "count", colors = "YlOrRd", breaks = breaks)
+  )
+})
+
+test_that("a binned brewer scale takes fewer bins than brewer.pal defines", {
+  skip_if_not_installed("sf")
+  skip_if_not_installed("ggplot2")
+  skip_if_not_installed("RColorBrewer")
+
+  df <- data.frame(
+    cell_id = c(12847, 12532),
+    cell_area = c(863.94, 863.94),
+    count = c(1, 20)
+  )
+
+  expect_no_warning(
+    hexify_heatmap(df, value = "count", colors = "YlOrRd", breaks = c(0, 3, 40))
+  )
+})
+
+test_that("an unknown palette name is an error naming the families", {
+  skip_if_not_installed("sf")
+  skip_if_not_installed("ggplot2")
+
+  df <- data.frame(
+    cell_id = c(12847, 12532),
+    cell_area = c(863.94, 863.94),
+    count = c(10, 20)
+  )
+
+  expect_error(hexify_heatmap(df, value = "count", colors = "NotAPalette"),
+               "not a palette name hexify knows")
+  expect_error(hexify_heatmap(df, value = "count", colors = "NotAPalette"),
+               "viridis")
+})
+
+test_that("resolve_palette_name names the family a palette belongs to", {
+  skip_if_not_installed("RColorBrewer")
+
+  expect_equal(hexify:::resolve_palette_name("turbo")$kind, "viridis")
+  expect_equal(hexify:::resolve_palette_name("Magma")$name, "magma")
+  expect_equal(hexify:::resolve_palette_name("YlOrRd")$kind, "brewer")
+  expect_equal(hexify:::resolve_palette_name("YlOrRd")$name, "YlOrRd")
 })

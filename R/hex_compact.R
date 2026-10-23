@@ -1,14 +1,94 @@
 # R/hex_compact.R
 # Multi-resolution compaction and uncompaction
 
+#' The resolution an ISEA index string carries, as its index type spells it;
+#' -1 for a string too short to be an index
+#' @param indices Character vector of index strings
+#' @param g The grid the cells belong to
+#' @noRd
+index_resolution <- function(indices, g) {
+  res <- cpp_get_index_resolution(as.character(indices), aperture_to_int(g@aperture),
+                                  index_type_for_aperture(g@aperture))
+  res[nchar(indices) < 2L] <- -1L
+  res
+}
+
+#' The cells an ISEA index string names
+#' @noRd
+isea_index_cells <- function(indices, g) {
+  isea_index_to_cells(indices, aperture_to_int(g@aperture),
+                      index_type_for_aperture(g@aperture), icosa_arg(g))
+}
+
+#' Stop unless every index names a cell of the grid
+#'
+#' An index string is arithmetic, so one can be written that names nothing --
+#' by appending a digit to a cell at a vertex of the solid, for instance. Saying
+#' so here names the string, rather than letting a cell-ID range check further
+#' down report a number the caller never wrote.
+#'
+#' @param indices Character vector of index strings
+#' @param g The grid the cells belong to
+#' @param what The calling function, for the message
+#' @return The cells the indices name
+#' @noRd
+check_isea_indices <- function(indices, g, what) {
+  resolutions <- index_resolution(indices, g)
+  if (any(resolutions < 0L)) {
+    stop(what, "(): ", "index strings carry a two-character quad and one digit ",
+         "per resolution; these are shorter than that: ",
+         paste(utils::head(indices[resolutions < 0L], 5), collapse = ", "),
+         call. = FALSE)
+  }
+
+  cells <- isea_index_cells(indices, g)
+  limit <- vapply(resolutions,
+                  function(r) aperture_n_cells(g@aperture, r, grid_polyhedron(g)),
+                  numeric(1))
+  named_nothing <- is.na(cells) | cells < 1 | cells > limit
+
+  if (any(named_nothing)) {
+    stop(what, "(): these index strings name no cell of the grid: ",
+         paste(utils::head(indices[named_nothing], 5), collapse = ", "),
+         if (sum(named_nothing) > 5) {
+           sprintf(" (and %d more)", sum(named_nothing) - 5)
+         } else {
+           ""
+         },
+         call. = FALSE)
+  }
+
+  cells
+}
+
+#' The index strings of the children of indexed cells, one level down
+#'
+#' Appending a digit to the index would name the children, except at the twelve
+#' icosahedron vertices: a vertex sits at the corner of several quads and
+#' carries an index spelling in each, so a digit appended to one spelling can
+#' name a cell held by another quad, or nothing at all. The cells are read
+#' instead, and written back as the index each of them carries.
+#'
+#' @param indices Character vector of index strings, all at `resolution`
+#' @param resolution Resolution the indices are at
+#' @param g The grid the cells belong to
+#' @return Character vector of child index strings
+#' @noRd
+isea_child_indices <- function(indices, resolution, g) {
+  cells <- isea_index_cells(indices, g)
+  children <- get_children(cells, grid_at_resolution(g, resolution))
+  cell_to_index(unique(cell_id_unlist(children)),
+                grid_at_resolution(g, resolution + 1L))
+}
+
 #' Compact Hex Cells
 #'
-#' Merges child cells into their parent when all children are present.
-#' This is a lossless compression — no spatial information is lost.
-#' The compact representation uses fewer cells to cover the same area.
+#' Merges child cells into their parent when all children are present, so that
+#' the same set of cells is named by fewer of them.
 #'
 #' @param cell_ids Cell IDs to compact. For H3 grids, a character vector.
-#'   For ISEA grids, a character vector of hierarchical index strings.
+#'   For ISEA grids, a character vector of hierarchical index strings, as
+#'   \code{\link{cell_to_index}} returns for apertures 3, 4, 7 and 9.
 #' @param grid A HexGridInfo object specifying the grid.
 #'
 #' @return A character vector of compacted cell IDs. Cells that could be
@@ -17,9 +97,19 @@
 #' @details
 #' **H3 backend:** Uses the vendored H3 `compactCells` function.
 #'
-#' **ISEA backend (aperture 7, Z7 index):** Groups cells by parent index
-#' (dropping the last digit). If all 7 children are present, replaces them
-#' with the parent. Iterates until no further compaction is possible.
+#' **ISEA backend:** Cells are grouped by [get_parent()], and a group holding as
+#' many distinct cells as its parent has children replaces them, from the finest
+#' resolution up until no further compaction is possible. That count is the
+#' aperture away from the twelve icosahedron vertices and fewer at one, and it
+#' is read rather than assumed: a vertex cell sits at the corner of several
+#' quads and carries an index spelling in each, so appending a digit to any one
+#' spelling names neither all of its children nor only its children.
+#'
+#' What is preserved is the set of cells: uncompacting the result at the
+#' original resolution returns the input. The covered area is not identical,
+#' because a hexagonal hierarchy is not congruent at any aperture -- a parent
+#' does not tile exactly into its children -- so an area computed on the
+#' compacted set differs from one computed on the original.
 #'
 #' @seealso [hex_uncompact()] for the inverse operation,
 #'   [get_parent()], [get_children()] for hierarchical operations
@@ -34,6 +124,12 @@
 #' compact <- hex_compact(children, g)
 #' compact  # Should return the parent
 #' }
+#'
+#' # ISEA, on the default aperture
+#' g <- hex_grid(resolution = 2, aperture = 3)
+#' children <- cell_to_index(get_children(40L, g)[[1]],
+#'                           hex_grid(resolution = 3, aperture = 3))
+#' hex_compact(children, g)
 hex_compact <- function(cell_ids, grid) {
   g <- extract_grid(grid)
 
@@ -41,60 +137,80 @@ hex_compact <- function(cell_ids, grid) {
     return(cpp_h3_compactCells(as.character(cell_ids)))
   }
 
-  # ISEA Z7 compaction (pure R)
-  ap <- as.integer(g@aperture)
-  if (ap != 7) {
-    stop("hex_compact() for ISEA currently only supports aperture 7 (Z7 index)")
+  # ISEA compaction (pure R), on the per-level digit every ISEA index carries
+  ap <- aperture_to_int(g@aperture)
+  if (is_mixed_aperture(g@aperture)) {
+    stop("hex_compact() has no index arithmetic for a mixed aperture sequence")
   }
 
-  ids <- as.character(cell_ids)
-  changed <- TRUE
+  ids <- unique(as.character(cell_ids))
+  check_isea_indices(ids, g, "hex_compact")
 
-  while (changed) {
-    changed <- FALSE
-    # Group by parent (drop last digit)
-    parents <- substr(ids, 1, nchar(ids) - 1L)
-    # Only cells with length > 2 can be compacted (resolution > 0)
-    compactable <- nchar(ids) > 2L
+  # Levels are taken from the finest up: each level's full sibling sets become
+  # parents at the next one, which the following pass reads.
+  levels <- rev(seq_len(max(index_resolution(ids, g))))
 
-    if (!any(compactable)) break
+  for (level in levels) {
+    at_level <- index_resolution(ids, g) == level
+    if (!any(at_level)) next
 
-    # Parents with all 7 distinct children (0-6) present. Group by distinct
-    # last digit rather than raw row count, so duplicate cell IDs can't be
-    # mistaken for a full sibling set.
-    compactable_ids <- ids[compactable]
-    compactable_parents <- parents[compactable]
-    last_digit <- substr(compactable_ids, nchar(compactable_ids), nchar(compactable_ids))
-    digit_sets <- split(last_digit, compactable_parents)
-    full_parents <- names(digit_sets)[vapply(digit_sets, function(d) length(unique(d)) == 7L, logical(1))]
+    parent_grid <- grid_at_resolution(g, level - 1L)
+    cells <- isea_index_cells(ids[at_level], g)
+    groups <- split(cells, get_parent(cells, grid_at_resolution(g, level)))
+    candidates <- as_cell_id(names(groups))
 
-    if (length(full_parents) > 0) {
-      changed <- TRUE
-      # Remove children of full parents, add parent. If the input already
-      # contained the parent id itself alongside all 7 children, that parent
-      # entry's own `parents` value (its grandparent) never matches
-      # `full_parents`, so it would survive untouched while the
-      # newly-synthesized parent is also appended -- drop it explicitly to
-      # avoid emitting the same parent id twice.
-      is_child_of_full <- compactable & parents %in% full_parents
-      is_full_parent_itself <- ids %in% full_parents
-      remaining <- ids[!is_child_of_full & !is_full_parent_itself]
-      ids <- c(remaining, full_parents)
+    # Every cell in a group has this parent, so a group holding as many
+    # distinct cells as the parent has children holds all of them. That is the
+    # aperture, fewer at the vertex cells of the solid, which are read rather
+    # than assumed.
+    expected <- rep(ap, length(candidates))
+    vertex <- isea_cell_sides(candidates, parent_grid) != 6L
+    if (any(vertex)) {
+      expected[vertex] <- lengths(get_children(candidates[vertex], parent_grid))
     }
+
+    sizes <- vapply(groups, function(cells) length(unique(cells)), integer(1))
+    full <- sizes == expected
+    if (!any(full)) next
+
+    merged <- cell_to_index(candidates[full], parent_grid)
+    covered <- cell_id_unlist(groups[full])
+    ids <- unique(c(setdiff(ids[!at_level], merged),
+                    ids[at_level][!(cells %in% covered)],
+                    merged))
   }
 
   # Mixed-resolution input can also leave a coarser ancestor and one of its
   # own (not-fully-compactable) descendants both present in the result --
   # the ancestor's area already covers the descendant's, so the descendant
   # is redundant even though it's not a literal duplicate ID.
-  if (length(ids) > 1L) {
-    is_redundant <- vapply(seq_along(ids), function(k) {
-      any(nchar(ids) < nchar(ids[k]) & substr(ids[k], 1, nchar(ids)) == ids)
-    }, logical(1))
-    ids <- ids[!is_redundant]
-  }
+  if (length(ids) > 1L) ids <- ids[!has_listed_ancestor(ids, g)]
 
   ids
+}
+
+#' Whether each index string has an ancestor among the others
+#'
+#' The ancestors are the iterated parents of get_parent(), read up to the
+#' coarsest resolution present.
+#' @param ids Character vector of index strings
+#' @param g The grid the cells belong to
+#' @return Logical vector
+#' @noRd
+has_listed_ancestor <- function(ids, g) {
+  res <- index_resolution(ids, g)
+  cells <- isea_index_cells(ids, g)
+  listed <- paste(res, as.character(cells))
+  out <- logical(length(ids))
+  if (max(res) == min(res)) return(out)
+  up <- cells
+  for (r in seq.int(max(res), min(res) + 1L)) {
+    moving <- res >= r
+    up[moving] <- get_parent(up[moving], grid_at_resolution(g, r))
+    hit <- moving & paste(r - 1L, as.character(up)) %in% listed
+    out <- out | hit
+  }
+  out
 }
 
 #' Uncompact Hex Cells
@@ -111,9 +227,11 @@ hex_compact <- function(cell_ids, grid) {
 #' @details
 #' **H3 backend:** Uses the vendored H3 `uncompactCells` function.
 #'
-#' **ISEA backend (aperture 7, Z7 index):** Appends digits 0-6 to expand
-#' each cell to its 7 children, repeating until the target resolution is
-#' reached.
+#' **ISEA backend:** Cells are expanded through [get_children()], a level at a
+#' time, until the target resolution is reached. Appending each digit of the
+#' aperture names the children of a cell whose whole ancestry lies inside one
+#' quad, but not those of a cell at an icosahedron vertex, whose children carry
+#' index spellings in the several quads meeting there.
 #'
 #' @seealso [hex_compact()] for the inverse operation
 #'
@@ -124,6 +242,10 @@ hex_compact <- function(cell_ids, grid) {
 #' parent <- "832830fffffffff"
 #' hex_uncompact(parent, g, target_resolution = 4L)
 #' }
+#'
+#' # ISEA, on the default aperture
+#' g <- hex_grid(resolution = 2, aperture = 3)
+#' hex_uncompact(cell_to_index(40L, g), g, target_resolution = 3L)
 hex_uncompact <- function(cell_ids, grid, target_resolution) {
   g <- extract_grid(grid)
   target_resolution <- as.integer(target_resolution)
@@ -132,15 +254,15 @@ hex_uncompact <- function(cell_ids, grid, target_resolution) {
     return(cpp_h3_uncompactCells(as.character(cell_ids), target_resolution))
   }
 
-  # ISEA Z7 uncompaction (pure R)
-  ap <- as.integer(g@aperture)
-  if (ap != 7) {
-    stop("hex_uncompact() for ISEA currently only supports aperture 7 (Z7 index)")
+  # ISEA uncompaction (pure R)
+  if (is_mixed_aperture(g@aperture)) {
+    stop("hex_uncompact() has no index arithmetic for a mixed aperture sequence")
   }
 
   ids <- as.character(cell_ids)
+  check_isea_indices(ids, g, "hex_uncompact")
 
-  initial_res <- nchar(ids) - 2L  # Z7: first 2 chars are quad
+  initial_res <- index_resolution(ids, g)
   if (any(initial_res > target_resolution)) {
     stop(sprintf(
       "target_resolution (%d) is coarser than some input cells (max resolution %d); hex_uncompact() cannot expand to a coarser resolution",
@@ -149,19 +271,18 @@ hex_uncompact <- function(cell_ids, grid, target_resolution) {
   }
 
   repeat {
-    # Check which cells need expansion
-    current_res <- nchar(ids) - 2L  # Z7: first 2 chars are quad
+    current_res <- index_resolution(ids, g)
     needs_expansion <- current_res < target_resolution
 
     if (!any(needs_expansion)) break
 
-    # Expand cells that need it
-    expanded <- unlist(lapply(ids[needs_expansion], function(id) {
-      paste0(id, 0:6)
-    }))
+    # A level at a time, so each cell's children are read at its own resolution
+    coarsest <- min(current_res[needs_expansion])
+    expanding <- needs_expansion & current_res == coarsest
 
-    ids <- c(ids[!needs_expansion], expanded)
+    ids <- c(ids[!expanding],
+             isea_child_indices(ids[expanding], coarsest, g))
   }
 
-  ids
+  unique(ids)
 }

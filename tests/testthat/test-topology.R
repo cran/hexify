@@ -54,3 +54,131 @@ test_that("hex_distance works for same-quad ISEA cells", {
   b <- lonlat_to_cell(10, 50, g)  # Same location = same cell
   expect_equal(hex_distance(a, b, g), 0L)
 })
+
+test_that("adjacent ISEA cells are one hop apart, at every aperture", {
+  for (aperture in c(3L, 4L, 7L)) {
+    for (resolution in 2:3) {
+      label <- sprintf("aperture %d resolution %d", aperture, resolution)
+      grid <- hex_grid(resolution = resolution, aperture = aperture)
+      n_cells <- 2 + 10 * aperture^resolution
+
+      neighbours <- get_neighbors(seq_len(n_cells), grid)
+      from <- rep(seq_len(n_cells), lengths(neighbours))
+      to <- cell_id_unlist(neighbours)
+
+      expect_equal(hex_distance(from, to, grid),
+                   rep(1L, length(from)), info = label)
+    }
+  }
+})
+
+test_that("ISEA distances match breadth-first search over the neighbours", {
+  bfs_hops <- function(source, resolution, aperture, depth) {
+    hops <- c(0L)
+    names(hops) <- as.character(source)
+    frontier <- source
+
+    for (step in seq_len(depth)) {
+      reached <- unique(cell_id_unlist(cpp_get_neighbors_isea(numeric(0), as_cell_id(frontier),
+                                                              resolution, aperture,
+                                                              integer(0))))
+      reached <- reached[!(as.character(reached) %in% names(hops))]
+      if (length(reached) == 0) break
+      hops[as.character(reached)] <- step
+      frontier <- reached
+    }
+
+    hops
+  }
+
+  set.seed(11)
+  for (aperture in c(3L, 4L, 7L)) {
+    for (resolution in 2:3) {
+      label <- sprintf("aperture %d resolution %d", aperture, resolution)
+      grid <- hex_grid(resolution = resolution, aperture = aperture)
+      n_cells <- 2 + 10 * aperture^resolution
+
+      for (source in sample(n_cells, 3)) {
+        truth <- bfs_hops(source, resolution, aperture, 4L)
+        targets <- as.numeric(names(truth))
+        expect_equal(hex_distance(rep(source, length(targets)), targets, grid),
+                     as.integer(truth), info = label)
+      }
+    }
+  }
+})
+
+test_that("aperture 3 odd resolutions read the rotated cell lattice", {
+  # One substrate point in three is a cell there, so the six neighbours stand
+  # sqrt(3) substrate units apart and a raw i/j reading triples the distance
+  grid <- hex_grid(resolution = 3, aperture = 3)
+  cell <- 229
+
+  neighbours <- get_neighbors(cell, grid)[[1]]
+  expect_equal(hex_distance(cell, neighbours, grid),
+               rep(1L, length(neighbours)))
+
+  expect_equal(cpp_cell_lattice_generator(3L, 3L, integer(0)), c(2, 1))
+  expect_equal(cpp_cell_lattice_generator(4L, 3L, integer(0)), c(1, 0))
+  expect_equal(cpp_cell_lattice_generator(3L, 4L, integer(0)), c(1, 0))
+  expect_equal(cpp_cell_lattice_generator(3L, 7L, integer(0)), c(1, 0))
+  expect_equal(cpp_cell_lattice_generator(1L, 0L, c(4L, 3L)), c(2, 1))
+})
+
+test_that("a mixed aperture sequence walks like a pure one", {
+  for (spelling in c("4/3", "4/7", "7/3", "3/4")) {
+    for (resolution in 2:3) {
+      label <- sprintf("aperture %s resolution %d", spelling, resolution)
+      grid <- hex_grid(resolution = resolution, aperture = spelling)
+      n_cells <- n_cells(grid)
+
+      neighbours <- get_neighbors(seq_len(n_cells), grid)
+
+      # Twelve icosahedron vertices with five neighbours, six everywhere else
+      expect_equal(sum(lengths(neighbours) == 5L), 12L, info = label)
+      expect_equal(sum(lengths(neighbours) == 6L), n_cells - 12L, info = label)
+
+      from <- rep(seq_len(n_cells), lengths(neighbours))
+      to <- cell_id_unlist(neighbours)
+      expect_equal(hex_distance(from, to, grid), rep(1L, length(from)),
+                   info = label)
+    }
+  }
+})
+
+test_that("mixed-sequence distances match breadth-first search", {
+  bfs_hops <- function(source, grid, depth) {
+    hops <- c(0L)
+    names(hops) <- as.character(source)
+    frontier <- source
+
+    for (step in seq_len(depth)) {
+      reached <- unique(cell_id_unlist(grid_neighbors_isea(frontier, grid)))
+      reached <- reached[!(as.character(reached) %in% names(hops))]
+      if (length(reached) == 0) break
+      hops[as.character(reached)] <- step
+      frontier <- reached
+    }
+
+    hops
+  }
+
+  set.seed(5)
+  for (spelling in c("4/3", "4/7", "7/3")) {
+    label <- paste("aperture", spelling)
+    grid <- hex_grid(resolution = 3, aperture = spelling)
+
+    for (source in sample(n_cells(grid), 3)) {
+      truth <- bfs_hops(source, grid, 4L)
+      targets <- as.numeric(names(truth))
+      expect_equal(hex_distance(rep(source, length(targets)), targets, grid),
+                   as.integer(truth), info = label)
+    }
+  }
+})
+
+test_that("a missing cell ID gives a missing distance", {
+  grid <- hex_grid(resolution = 3, aperture = "4/3")
+  expect_equal(hex_distance(c(5, NA, 20), c(5, 10, NA), grid),
+               c(0L, NA_integer_, NA_integer_))
+})

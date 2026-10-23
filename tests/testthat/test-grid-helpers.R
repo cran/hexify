@@ -145,9 +145,10 @@ test_that("cell_to_sf returns valid geometries for all cells", {
   validity <- sf::st_is_valid(polys)
   expect_true(all(validity))
 
-  # These pentagon cells should have 5 vertices (6 coords with closing)
-  vertex_counts <- sapply(sf::st_geometry(polys), function(g) nrow(sf::st_coordinates(g)))
-  expect_true(all(vertex_counts == 6))
+  # These pentagon cells have 5 corners (6 coords with closing)
+  rings <- cpp_cell_to_corners(numeric(0), as_cell_id(polar_cells), grid@resolution,
+                               as.integer(grid@aperture), integer(0))
+  expect_true(all(vapply(rings, nrow, integer(1)) == 6L))
 })
 
 # =============================================================================
@@ -195,4 +196,157 @@ test_that("cell_to_sf keeps non-crossing cells as POLYGON", {
 
   geom_type <- as.character(sf::st_geometry_type(polys))
   expect_equal(geom_type, "POLYGON")
+})
+
+test_that("grid_rect returns every ISEA cell meeting the box", {
+  skip_on_cran()
+  skip_if_not_installed("sf")
+  cases <- list(
+    list(c(-74.3, 40.5, -73.7, 40.95), 3, 11),
+    list(c(-74.3, 40.5, -73.7, 40.95), 4, 8),
+    list(c(-74.3, 40.5, -73.7, 40.95), 7, 5),
+    list(c(5, 45, 16, 55), 7, 4),
+    list(c(-10, 35, 30, 60), 7, 5),
+    list(c(-20, 60, 40, 75), 4, 6)
+  )
+  for (cs in cases) {
+    bbox <- cs[[1]]
+    g <- hex_grid(type = "isea", resolution = cs[[3]], aperture = cs[[2]])
+    got <- grid_rect(bbox, g)
+    step <- g@diagonal_km / 111.32 / 20
+    pts <- expand.grid(lon = c(seq(bbox[1], bbox[3], by = step), bbox[3]),
+                       lat = c(seq(bbox[2], bbox[4], by = step), bbox[4]))
+    ref <- unique(lonlat_to_cell(pts$lon, pts$lat, g))
+    expect_length(setdiff(ref, got$cell_id), 0L)
+    expect_false(anyDuplicated(got$cell_id) > 0L)
+  }
+})
+
+# =============================================================================
+# Densified cell edges, neighbour links and child polygons
+# =============================================================================
+
+ring_of <- function(x) sf::st_coordinates(sf::st_geometry(x)[[1]])[, 1:2]
+
+test_that("cell_to_sf densifies ISEA edges to the tolerance asked", {
+  g <- hex_grid(resolution = 3, aperture = 3)
+  cell <- lonlat_to_cell(10, 50, g)
+  corners <- nrow(ring_of(cell_to_sf(cell, g, densify = 0)))
+  default <- nrow(ring_of(cell_to_sf(cell, g)))
+  fine <- nrow(ring_of(cell_to_sf(cell, g, densify = 1e-5)))
+  expect_equal(corners, 7L)
+  expect_gt(default, corners)
+  expect_gt(fine, default)
+  expect_equal(ring_of(cell_to_sf(cell, g, densify = 0.001)),
+               ring_of(cell_to_sf(cell, g)))
+  expect_error(cell_to_sf(cell, g, densify = -1), "non-negative")
+})
+
+test_that("cell_to_sf densifies H3 edges along their great circles", {
+  g <- suppressMessages(hex_grid(resolution = 2, type = "h3"))
+  cell <- lonlat_to_cell(10, 50, g)
+  corners <- ring_of(cell_to_sf(cell, g, wrap_dateline = FALSE))
+  dense <- ring_of(cell_to_sf(cell, g, wrap_dateline = FALSE, densify = 1e-4))
+  expect_equal(nrow(corners), 7L)
+  expect_gt(nrow(dense), nrow(corners))
+  V <- hexify:::unit_vec(corners[, 1], corners[, 2])
+  normals <- t(vapply(1:6, function(i) {
+    n <- c(V[i, 2] * V[i + 1, 3] - V[i, 3] * V[i + 1, 2],
+           V[i, 3] * V[i + 1, 1] - V[i, 1] * V[i + 1, 3],
+           V[i, 1] * V[i + 1, 2] - V[i, 2] * V[i + 1, 1])
+    n / sqrt(sum(n^2))
+  }, numeric(3)))
+  D <- hexify:::unit_vec(dense[, 1], dense[, 2])
+  off <- apply(abs(D %*% t(normals)), 1, min)
+  expect_lt(max(off), 1e-10)
+})
+
+piece_km <- function(ring, radius_km) {
+  p <- ring[-nrow(ring), , drop = FALSE] * pi / 180
+  q <- ring[-1L, , drop = FALSE] * pi / 180
+  h <- sin((q[, 2] - p[, 2]) / 2)^2 +
+    cos(p[, 2]) * cos(q[, 2]) * sin((q[, 1] - p[, 1]) / 2)^2
+  2 * asin(sqrt(pmin(1, h))) * radius_km
+}
+
+test_that("cell_to_sf(max_km) bounds every drawn piece in km", {
+  g <- hex_grid(resolution = 3, aperture = 3)
+  # Cell 82 has a 440 km piece the relative tolerance leaves whole
+  default <- ring_of(cell_to_sf(82, g, wrap_dateline = FALSE))
+  capped <- ring_of(cell_to_sf(82, g, wrap_dateline = FALSE, max_km = 50))
+  expect_gt(max(piece_km(default, grid_radius_km(g))), 400)
+  expect_lte(max(piece_km(capped, grid_radius_km(g))), 50)
+  # The cap only halves pieces further, so every default point stays
+  key <- function(r) paste(signif(r[, 1], 12), signif(r[, 2], 12))
+  expect_true(all(key(default) %in% key(capped)))
+
+  h <- suppressMessages(hex_grid(resolution = 2, type = "h3"))
+  hc <- lonlat_to_cell(10, 50, h)
+  expect_lte(max(piece_km(ring_of(cell_to_sf(hc, h, wrap_dateline = FALSE,
+                                             max_km = 20)), grid_radius_km(h))), 20)
+
+  g7 <- hex_grid(resolution = 2, aperture = 7)
+  c7 <- lonlat_to_cell(10, 50, g7)
+  for (shape in c("gosper", "descendants")) {
+    ring <- ring_of(cell_to_sf(c7, g7, shape = shape, depth = 1,
+                               wrap_dateline = FALSE, max_km = 20))
+    expect_lte(max(piece_km(ring, grid_radius_km(g7))), 20)
+  }
+
+  expect_error(cell_to_sf(82, g, max_km = 0), "positive")
+  expect_error(cell_to_sf(82, g, max_km = c(1, 2)), "positive")
+})
+
+test_that("cell_to_sf(max_km) reads km on the grid's own sphere", {
+  earth <- hex_grid(resolution = 3, aperture = 3)
+  moon <- hex_grid(resolution = 3, aperture = 3, radius_km = "moon")
+  ratio <- grid_radius_km(moon) / grid_radius_km(earth)
+  expect_equal(ring_of(cell_to_sf(82, moon, wrap_dateline = FALSE,
+                                  max_km = 50 * ratio)),
+               ring_of(cell_to_sf(82, earth, wrap_dateline = FALSE,
+                                  max_km = 50)))
+})
+
+test_that("get_neighbors(as_sf = TRUE) links each cell to its neighbours", {
+  g <- hex_grid(resolution = 4, aperture = 4)
+  cells <- lonlat_to_cell(c(10, -60), c(50, -15), g)
+  links <- get_neighbors(cells, g, k = 2, as_sf = TRUE)
+  rings <- get_neighbors(cells, g, k = 2, distances = TRUE)
+  expect_s3_class(links, "sf")
+  expect_equal(links$cell_id, rep(cells, vapply(rings, nrow, integer(1))))
+  expect_equal(links$neighbor_id, cell_id_unlist(lapply(rings, `[[`, "cell_id")))
+  expect_equal(links$ring_distance, unlist(lapply(rings, `[[`, "ring_distance")))
+  ends <- t(vapply(sf::st_geometry(links), function(l) {
+    xy <- sf::st_coordinates(l)
+    c(xy[1, 1:2], xy[nrow(xy), 1:2])
+  }, numeric(4)))
+  from <- cell_to_lonlat(links$cell_id, g)
+  to <- cell_to_lonlat(links$neighbor_id, g)
+  expect_equal(unname(ends), unname(cbind(from$lon_deg, from$lat_deg,
+                                          to$lon_deg, to$lat_deg)),
+               tolerance = 1e-9)
+})
+
+test_that("get_neighbors(as_sf = TRUE) splits a link at the antimeridian", {
+  g <- hex_grid(resolution = 3, aperture = 3)
+  cell <- lonlat_to_cell(179.9, 10, g)
+  links <- get_neighbors(cell, g, as_sf = TRUE)
+  lon <- sf::st_coordinates(links)[, 1]
+  expect_true(all(lon >= -180 & lon <= 180))
+})
+
+test_that("get_children(as_sf = TRUE) returns each child with its parent", {
+  for (ap in list(4, 3, "4/3")) {
+    g <- hex_grid(resolution = 2, aperture = ap)
+    parents <- c(1, 5, 5)
+    kids <- get_children(parents, g, levels = 2, as_sf = TRUE)
+    ids <- get_children(parents, g, levels = 2)
+    expect_equal(kids$parent_id, rep(as_cell_id(parents), lengths(ids)), info = ap)
+    expect_equal(kids$cell_id, cell_id_unlist(ids), info = ap)
+    expect_false(any(sf::st_is_empty(kids)), info = ap)
+  }
+  h <- suppressMessages(hex_grid(resolution = 1, type = "h3"))
+  hc <- lonlat_to_cell(c(10, -60), c(50, -15), h)
+  hk <- get_children(hc, h, as_sf = TRUE)
+  expect_equal(nrow(hk), length(unlist(get_children(hc, h))))
 })

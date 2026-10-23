@@ -2,7 +2,7 @@
 % Please edit documentation in R/hexify_index.R
 \name{hexify_get_resolution}
 \alias{hexify_get_resolution}
-\title{Get index resolution}
+\title{Get Index Resolution}
 \usage{
 hexify_get_resolution(
   index,
@@ -11,14 +11,14 @@ hexify_get_resolution(
 )
 }
 \arguments{
-\item{index}{Index string}
+\item{index}{Character vector of index strings}
 
 \item{aperture}{Aperture (3, 4, or 7)}
 
 \item{index_type}{Index encoding. Default "auto".}
 }
 \value{
-Integer resolution level
+Integer vector of resolution levels
 }
 \description{
 Returns the resolution level encoded in an index string.

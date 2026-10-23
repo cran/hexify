@@ -59,10 +59,10 @@ cells(result)
 n_cells(result)
 
 # Access all cell IDs (one per row)
-result@cell_id
+result$cell_id
 
 # Access cell centers
-head(result@cell_center)
+head(as.data.frame(result)[c("cell_cen_lon", "cell_cen_lat")])
 
 # Extract original data as data.frame
 head(as.data.frame(result))
@@ -116,7 +116,6 @@ birds_hex <- hexify(birds, lon = "lon", lat = "lat", grid = grid)
 
 # Extract data with cell IDs
 birds_gridded <- as.data.frame(birds_hex)
-birds_gridded$cell_id <- birds_hex@cell_id
 
 # Count observations per cell
 obs_counts <- aggregate(
@@ -153,7 +152,7 @@ ggplot() +
   labs(
     title = "Bird Observations in Equal-Area Cells",
     subtitle = sprintf("ISEA3H grid at resolution %d (~%.0f km² cells)",
-                       grid@resolution, grid@area_km2)
+                       summary(grid)$resolution, summary(grid)$area_km2)
   ) +
   theme_minimal(base_size = FIG_BASE_SIZE) +
   theme(

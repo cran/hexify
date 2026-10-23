@@ -32,6 +32,63 @@ is_brewer_palette <- function(palette_name) {
     palette_name %in% row.names(RColorBrewer::brewer.pal.info)
 }
 
+#' The viridis palettes, by name and by the letter viridisLite also takes
+#' @noRd
+viridis_palettes <- c("magma", "inferno", "plasma", "viridis", "cividis",
+                      "rocket", "mako", "turbo", letters[1:8])
+
+#' Which palette a name asks for
+#'
+#' A name that matches neither family stops here, where the message can name the
+#' families, rather than downstream in viridisLite, which reports the default it
+#' fell back to.
+#'
+#' @param colors A single palette name
+#' @return A list with the family in `kind` and the name to pass on in `name`
+#' @noRd
+resolve_palette_name <- function(colors) {
+  if (tolower(colors) %in% viridis_palettes) {
+    return(list(kind = "viridis", name = tolower(colors)))
+  }
+
+  if (is_brewer_palette(colors)) {
+    return(list(kind = "brewer", name = colors))
+  }
+
+  viridis <- paste(setdiff(viridis_palettes, letters), collapse = ", ")
+  if (!requireNamespace("RColorBrewer", quietly = TRUE)) {
+    stop("'", colors, "' is not one of the viridis palettes (", viridis,
+         "). For an RColorBrewer palette, install RColorBrewer with: ",
+         "install.packages('RColorBrewer')", call. = FALSE)
+  }
+
+  stop("'", colors, "' is not a palette name hexify knows. The viridis ",
+       "palettes are ", viridis, "; the RColorBrewer palettes are the row ",
+       "names of RColorBrewer::brewer.pal.info.", call. = FALSE)
+}
+
+#' A brewer palette at any number of levels
+#'
+#' `RColorBrewer::brewer.pal()` is defined from three colours up to the palette's
+#' own length. Below that it warns and returns three; above it a scale needs more
+#' colours than the palette holds, which interpolating over its full range gives.
+#'
+#' @param palette_name An RColorBrewer palette name
+#' @param n How many colours the scale needs
+#' @return A character vector of n colours
+#' @noRd
+brewer_colors <- function(palette_name, n) {
+  max_colors <- RColorBrewer::brewer.pal.info[palette_name, "maxcolors"]
+
+  if (n <= max_colors) {
+    return(RColorBrewer::brewer.pal(max(3L, n), palette_name)[seq_len(n)])
+  }
+
+  grDevices::colorRampPalette(
+    RColorBrewer::brewer.pal(max_colors, palette_name)
+  )(n)
+}
+
 #' Apply discrete color scale to ggplot
 #' @noRd
 apply_discrete_scale <- function(p, colors, legend_title, na_color, n_levels) {
@@ -47,17 +104,17 @@ apply_discrete_scale <- function(p, colors, legend_title, na_color, n_levels) {
     ))
   }
 
-  if (is_brewer_palette(colors)) {
-    max_colors <- RColorBrewer::brewer.pal.info[colors, "maxcolors"]
-    pal_colors <- RColorBrewer::brewer.pal(min(n_levels, max_colors), colors)
+  palette <- resolve_palette_name(colors)
+
+  if (palette$kind == "brewer") {
     return(p + ggplot2::scale_fill_manual(
-      values = pal_colors, name = legend_title, na.value = na_color
+      values = brewer_colors(palette$name, n_levels),
+      name = legend_title, na.value = na_color
     ))
   }
 
-  # Fallback: treat as viridis option name
   p + ggplot2::scale_fill_viridis_d(
-    option = tolower(colors), name = legend_title, na.value = na_color
+    option = palette$name, name = legend_title, na.value = na_color
   )
 }
 
@@ -76,39 +133,32 @@ apply_continuous_scale <- function(p, colors, legend_title, na_color) {
     ))
   }
 
-  if (is_brewer_palette(colors)) {
+  palette <- resolve_palette_name(colors)
+
+  if (palette$kind == "brewer") {
     return(p + ggplot2::scale_fill_distiller(
-      palette = colors, direction = 1,
+      palette = palette$name, direction = 1,
       name = legend_title, na.value = na_color
     ))
   }
 
-  # Fallback: treat as viridis option name
   p + ggplot2::scale_fill_viridis_c(
-    option = tolower(colors), name = legend_title, na.value = na_color
+    option = palette$name, name = legend_title, na.value = na_color
   )
 }
 
 #' Convert hexify data to sf polygons
+#'
+#' @param data A HexData object, an sf object (returned as is), or a data frame
+#'   with a cell_id column and the cell area in cell_area_km2 or cell_area
+#' @param aperture Aperture of the grid a data frame's cells belong to
+#' @param shape,depth Cell shape, as for cell_to_sf()
+#' @return sf object with one polygon per cell, carrying the cell's first data
+#'   row
 #' @noRd
-prepare_hex_sf <- function(data, aperture) {
-  # Handle HexData objects
+prepare_hex_sf <- function(data, aperture, shape = "hexagon", depth = 3L) {
   if (is_hex_data(data)) {
-    g <- data@grid
-    underlying_data <- data@data
-    unique_cells <- unique(data@cell_id)
-    hex_sf <- cell_to_sf(unique_cells, g)
-
-    # Join extra columns from original data
-    extra_cols <- setdiff(names(underlying_data), c("cell_id", "geometry"))
-    if (length(extra_cols) > 0) {
-      # Build data frame with cell_id for merge
-      data_with_id <- cbind(underlying_data, cell_id = data@cell_id)
-      cols <- c("cell_id", extra_cols)
-      data_unique <- data_with_id[!duplicated(data_with_id$cell_id), cols, drop = FALSE]
-      hex_sf <- merge(hex_sf, data_unique, by = "cell_id", all.x = TRUE)
-    }
-    return(hex_sf)
+    return(hex_data_cells_sf(data, shape = shape, depth = depth))
   }
 
   if (inherits(data, "sf")) return(data)
@@ -117,54 +167,103 @@ prepare_hex_sf <- function(data, aperture) {
     stop("data must be a HexData object or an sf object")
   }
 
-  # Handle legacy data frames with cell_area column
-  if ("cell_area" %in% names(data) || "cell_area_km2" %in% names(data)) {
-    # Get area to determine resolution
-    area <- if ("cell_area_km2" %in% names(data)) data$cell_area_km2[1]
-            else if ("cell_area" %in% names(data)) data$cell_area[1]
-
-    # Create temporary grid
-    grid <- hex_grid(area_km2 = area, aperture = aperture)
-
-    # Generate polygons
-    unique_cells <- unique(data$cell_id)
-    hex_sf <- cell_to_sf(unique_cells, grid)
-
-    # Join extra columns from original data
-    extra_cols <- setdiff(names(data), c("cell_id", "geometry"))
-    if (length(extra_cols) > 0) {
-      cols <- c("cell_id", extra_cols)
-      data_unique <- data[!duplicated(data$cell_id), cols, drop = FALSE]
-      hex_sf <- merge(hex_sf, data_unique, by = "cell_id", all.x = TRUE)
-    }
-    return(hex_sf)
+  if (!any(c("cell_area_km2", "cell_area") %in% names(data))) {
+    stop("data must contain 'cell_area' or 'cell_area_km2' column (output from hexify()).")
   }
 
-  stop("data must contain 'cell_area' or 'cell_area_km2' column (output from hexify()).")
+  area <- if ("cell_area_km2" %in% names(data)) data$cell_area_km2[1] else data$cell_area[1]
+  grid <- hex_grid(area_km2 = area, aperture = aperture)
+  data$cell_id <- as_cell_id(data$cell_id)
+  merge_first_rows(cell_to_sf(data$cell_id, grid, shape = shape, depth = depth),
+                   data, data$cell_id,
+                   setdiff(names(data), c("cell_id", "geometry")))
 }
 
-#' Resolve basemap specification to sf object
+#' Polygons of the cells of a HexData object, with each cell's first data row
+#'
+#' @param x HexData object
+#' @param columns Data columns to carry onto the polygons; NULL takes every
+#'   column of the data
+#' @param shape,depth Cell shape, as for cell_to_sf()
+#' @return sf object with one polygon per cell
+#' @noRd
+hex_data_cells_sf <- function(x, columns = NULL, shape = "hexagon", depth = 3L) {
+  rows <- x@data
+  if (inherits(rows, "sf")) rows <- sf::st_drop_geometry(rows)
+  if (is.null(columns)) columns <- setdiff(names(rows), "cell_id")
+  merge_first_rows(cell_to_sf(grid = x, shape = shape, depth = depth),
+                   rows, x@cell_id, columns)
+}
+
+#' Join the first data row of each cell onto the cell polygons
+#'
+#' @param hex_sf sf object with a cell_id column
+#' @param rows Data frame, one row per point
+#' @param cell_id Cell of each row
+#' @param columns Columns of rows to join
+#' @return hex_sf with the columns added
+#' @noRd
+merge_first_rows <- function(hex_sf, rows, cell_id, columns) {
+  if (length(columns) == 0) return(hex_sf)
+  first <- !duplicated(cell_id)
+  first_rows <- cbind(data.frame(cell_id = cell_id[first]),
+                      rows[first, columns, drop = FALSE])
+  merge(hex_sf, first_rows, by = "cell_id", all.x = TRUE)
+}
+
+#' Resolve a basemap specification to its vector and raster parts
+#'
+#' Returns a list with an `sf` and a `raster` element, either of which may be
+#' NULL. Legacy Raster* objects are converted to SpatRaster so that callers
+#' only ever handle one raster class.
+#'
 #' @noRd
 resolve_basemap <- function(basemap) {
-  if (is.null(basemap)) return(NULL)
+  none <- list(sf = NULL, raster = NULL)
 
-  if (is.character(basemap) && basemap == "world") {
-    return(hexify_world)
+  if (is.null(basemap) || isFALSE(basemap)) {
+    return(none)
   }
 
-  if (is.character(basemap) && basemap == "world_hires") {
-    if (!requireNamespace("rnaturalearth", quietly = TRUE)) {
-      stop("Package 'rnaturalearth' is required for basemap = 'world_hires'. ",
-           "Install with: install.packages('rnaturalearth')")
+  if (isTRUE(basemap)) {
+    return(list(sf = hexify_world, raster = NULL))
+  }
+
+  if (is.character(basemap) && length(basemap) == 1L) {
+    if (basemap == "world") {
+      return(list(sf = hexify_world, raster = NULL))
     }
-    return(rnaturalearth::ne_countries(scale = "medium", returnclass = "sf"))
+
+    if (basemap == "world_hires") {
+      if (!requireNamespace("rnaturalearth", quietly = TRUE)) {
+        stop("Package 'rnaturalearth' is required for basemap = 'world_hires'. ",
+             "Install with: install.packages('rnaturalearth')")
+      }
+      hires <- rnaturalearth::ne_countries(scale = "medium", returnclass = "sf")
+      return(list(sf = hires, raster = NULL))
+    }
   }
 
-  if (inherits(basemap, "sf") || inherits(basemap, "sfc")) {
-    return(basemap)
+  if (inherits(basemap, c("sf", "sfc"))) {
+    return(list(sf = basemap, raster = NULL))
   }
 
-  stop("basemap must be 'world', 'world_hires', or an sf object")
+  if (inherits(basemap, "SpatRaster")) {
+    if (!requireNamespace("terra", quietly = TRUE)) {
+      stop("Package 'terra' is required for raster basemaps")
+    }
+    return(list(sf = NULL, raster = basemap))
+  }
+
+  if (inherits(basemap, c("RasterLayer", "RasterBrick", "RasterStack"))) {
+    if (!requireNamespace("terra", quietly = TRUE)) {
+      stop("Package 'terra' is required for raster basemaps")
+    }
+    return(list(sf = NULL, raster = terra::rast(basemap)))
+  }
+
+  stop("basemap must be TRUE, FALSE, 'world', 'world_hires', an sf object, ",
+       "or a raster")
 }
 
 #' Create mask for areas outside basemap
@@ -262,39 +361,6 @@ build_standard_layers <- function(p, hex_sf, fill_col, hex_border, hex_lwd,
   }
 }
 
-#' Simple sf preparation for hexify_map (no extra column merging)
-#' @noRd
-prepare_hex_sf_simple <- function(data, aperture) {
-  # Handle HexData objects
-  if (is_hex_data(data)) {
-    g <- data@grid
-    unique_cells <- unique(data@cell_id)
-    return(cell_to_sf(unique_cells, g))
-  }
-
-  if (inherits(data, "sf")) return(data)
-
-  if (!is.data.frame(data) || !"cell_id" %in% names(data)) {
-    stop("data must be a HexData object or an sf object")
-  }
-
-  # Handle legacy data frames with cell_area column
-  if ("cell_area" %in% names(data) || "cell_area_km2" %in% names(data)) {
-    # Get area to determine resolution
-    area <- if ("cell_area_km2" %in% names(data)) data$cell_area_km2[1]
-            else if ("cell_area" %in% names(data)) data$cell_area[1]
-
-    # Create temporary grid
-    grid <- hex_grid(area_km2 = area, aperture = aperture)
-
-    # Generate polygons
-    unique_cells <- unique(data$cell_id)
-    return(cell_to_sf(unique_cells, grid))
-  }
-
-  stop("data must contain 'cell_area' or 'cell_area_km2' column (output from hexify()).")
-}
-
 #' Resolve value column name (auto-detect if NULL)
 #' @noRd
 resolve_value_column <- function(hex_sf, value, require = FALSE) {
@@ -369,41 +435,6 @@ generate_bin_labels <- function(breaks) {
   labels
 }
 
-#' Resolve basemap specification including raster support
-#' @noRd
-resolve_basemap_with_raster <- function(basemap) {
-  result <- list(sf = NULL, raster = NULL)
-  if (is.null(basemap)) return(result)
-
-  if (is.character(basemap) && basemap == "world") {
-    result$sf <- hexify_world
-    return(result)
-  }
-
-  if (inherits(basemap, "sf") || inherits(basemap, "sfc")) {
-    result$sf <- basemap
-    return(result)
-  }
-
-  if (inherits(basemap, "SpatRaster")) {
-    if (!requireNamespace("terra", quietly = TRUE)) {
-      stop("Package 'terra' is required for SpatRaster basemaps")
-    }
-    result$raster <- basemap
-    return(result)
-  }
-
-  if (inherits(basemap, c("RasterLayer", "RasterBrick", "RasterStack"))) {
-    if (!requireNamespace("raster", quietly = TRUE)) {
-      stop("Package 'raster' is required for Raster* basemaps")
-    }
-    result$raster <- basemap
-    return(result)
-  }
-
-stop("basemap must be 'world', an sf object, or a SpatRaster (terra)")
-}
-
 # =============================================================================
 # PUBLIC FUNCTIONS
 # =============================================================================
@@ -411,7 +442,7 @@ stop("basemap must be 'world', an sf object, or a SpatRaster (terra)")
 # hexify_map() removed - use plot() method on HexData objects instead
 
 
-#' Quick world map plot
+#' Quick World Map Plot
 #'
 #' Simple wrapper to plot the built-in world map.
 #'
@@ -437,7 +468,7 @@ plot_world <- function(fill = "gray90", border = "gray50", ...) {
 }
 
 
-#' Create a ggplot2 visualization of hexagonal grid cells
+#' Create a ggplot2 Visualization of Hexagonal Grid Cells
 #'
 #' Creates a ggplot2-based visualization of hexagonal grid cells, optionally
 #' colored by a value column. Supports continuous and discrete color scales,
@@ -450,8 +481,9 @@ plot_world <- function(fill = "gray90", border = "gray50", ...) {
 #'   'count' or 'n' column, that will be used automatically.
 #' @param basemap Optional basemap. Can be:
 #'   \itemize{
-#'     \item \code{NULL}: No basemap (default)
-#'     \item \code{"world"}: Use built-in \code{hexify_world} map (low resolution)
+#'     \item \code{NULL} or \code{FALSE}: No basemap (default)
+#'     \item \code{"world"} or \code{TRUE}: Use built-in \code{hexify_world} map
+#'       (low resolution)
 #'     \item \code{"world_hires"}: Use high-resolution map from rnaturalearth (requires package)
 #'     \item An sf object: User-supplied vector map, from any format
 #'       \code{sf::st_read()} reads, such as a shapefile, 'GeoJSON' or 'GeoPackage'
@@ -468,9 +500,13 @@ plot_world <- function(fill = "gray90", border = "gray50", ...) {
 #' @param colors Color palette for the heatmap. Can be:
 #'   \itemize{
 #'     \item A character vector of colors (for manual scale)
-#'     \item A single RColorBrewer palette name (e.g., "YlOrRd", "Greens")
+#'     \item A single RColorBrewer palette name (e.g., "YlOrRd", "Greens"),
+#'       interpolated over its own range when a binned scale asks for more
+#'       levels than the palette holds
+#'     \item A viridis palette name ("viridis", "magma", "turbo", ...)
 #'     \item NULL to use viridis
 #'   }
+#'   A name in neither family is an error naming the families.
 #' @param breaks Numeric vector of break points for binning continuous values,
 #'   or NULL for continuous scale. Use \code{Inf} and \code{-Inf} for open-ended bins.
 #' @param labels Labels for the breaks (length should be one less than breaks).
@@ -484,6 +520,7 @@ plot_world <- function(fill = "gray90", border = "gray50", ...) {
 #' @param mask_outside Logical. If TRUE and basemap is provided, mask hexagon
 #'   portions that fall outside the basemap polygons.
 #' @param aperture Grid aperture (default 3), used if data is from hexify()
+#' @inheritParams cell_to_sf
 #' @param xlim Optional x-axis limits (in target CRS units) as c(min, max)
 #' @param ylim Optional y-axis limits (in target CRS units) as c(min, max)
 #' @param title Plot title
@@ -584,6 +621,8 @@ hexify_heatmap <- function(data,
                         basemap_lwd = 0.5,
                         mask_outside = FALSE,
                         aperture = 3L,
+                        shape = c("hexagon", "gosper", "descendants"),
+                        depth = 3L,
                         xlim = NULL,
                         ylim = NULL,
                         title = NULL,
@@ -598,7 +637,8 @@ hexify_heatmap <- function(data,
   }
 
   # Prepare hex sf with extra columns merged
-  hex_sf <- prepare_hex_sf(data, aperture)
+  hex_sf <- prepare_hex_sf(data, aperture, shape = match.arg(shape),
+                           depth = depth)
 
   # Resolve value column (NULL means uniform fill)
   value <- resolve_value_column(hex_sf, value, require = FALSE)
@@ -609,7 +649,7 @@ hexify_heatmap <- function(data,
   hex_sf <- sf::st_transform(hex_sf, crs)
 
   # Resolve and transform basemap (supports sf and SpatRaster)
-  basemap_info <- resolve_basemap_with_raster(basemap)
+  basemap_info <- resolve_basemap(basemap)
   basemap_sf <- basemap_info$sf
   basemap_raster <- basemap_info$raster
   if (!is.null(basemap_sf)) {
@@ -617,9 +657,7 @@ hexify_heatmap <- function(data,
   }
 
   # Disable S2 for geometry operations (avoids edge crossing errors)
-  s2_was_used <- sf::sf_use_s2()
-  sf::sf_use_s2(FALSE)
-  on.exit(sf::sf_use_s2(s2_was_used), add = TRUE)
+  local_s2(FALSE)
 
   # Create mask for areas outside basemap (if requested)
   mask_sf <- NULL

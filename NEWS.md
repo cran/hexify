@@ -1,3 +1,618 @@
+# hexify 0.9.0
+
+## Printing and documentation
+
+* A grid prints as one line (`<HexGridInfo> aperture 3, resolution 10:
+  590,492 cells of 863.8 km^2`) and gridded data as two; `summary()` keeps
+  the full listing, which for gridded data now includes the grid's
+  orientation and ellipsoid (#108). The list `hexify_grid()` builds and the
+  `dggs` list `as_dggrid()` returns print as one line too.
+
+* Each class has one help page listing its methods: `?HexGridInfo-class` and
+  `?HexData-class` carry `show()`, `summary()`, `plot()`, `st_as_sf()`,
+  `st_crs()`, `as_tibble()` and the accessors (#110). Help titles are in
+  Title Case. The empty pages `hexify-conversions`, `hexify-grid` and
+  `hexify-stats` are gone, and `hexify_grid()`, `dgverify()`,
+  `hexify_compare_resolutions()`, `hexify_roundtrip_test()` and the
+  projection-level helpers (`hexify_forward()`, `hexify_inverse()`,
+  `hexify_forward_to_face()`, `hexify_which_face()`, `hexify_face_centers()`,
+  `hexify_build_icosa()`) are marked internal: `hex_grid()` is the grid
+  constructor.
+
+* Every exported user-facing topic has a runnable example; the
+  `hex_globe_png()` example runs in an interactive session with hexglobe
+  installed (#109).
+
+* `hex_grid(area_km2 = , type = "h3")` no longer warns on every call: the
+  note that H3 cells are not equal-area is one message per session on both
+  the area and the resolution path (#112). `grid_clip()`, `hexify_heatmap()`
+  and `plot()` no longer print sf's s2 switch and planar-assumption
+  messages, and `dg_closest_res_to_area(show_info = TRUE)` reports in one
+  message.
+
+* The README and vignettes read grids and data through `summary()`,
+  `as.data.frame()`, `n_cells()` and `$` columns.
+
+## Breaking changes
+
+* ISEA cell IDs are 64-bit integers (`bit64::integer64`, a new import), exact
+  at every resolution (#99). They were doubles, which hold whole numbers
+  exactly only below 2^53: aperture 4 from resolution 25 and aperture 7 from
+  resolution 18 returned IDs that decoded to other cells, and aperture 7 from
+  resolution 22 IDs that did not decode. `lonlat_to_cell()`, `get_parent()`,
+  `get_children()`, `get_neighbors()`, `cell_to_sf()`, `hexify()` and every
+  other function returning ISEA cell IDs return integer64; functions taking
+  them also accept whole numbers below 2^53 and digit strings, and refuse a
+  double of 2^53 or more, which cannot name a cell exactly. H3 cell IDs stay
+  character. `n_cells()` stays a double: it is a count, not an ID.
+  `unlist()`, `sapply()`, `ifelse()` and `for` loops drop the integer64
+  class, leaving raw bits that read as numbers between 0 and 1: combine the
+  lists `get_neighbors()` and `get_children()` return with `do.call(c, x)`.
+  A value between 0 and 1 passed as a cell ID is refused with that hint.
+
+* A grid's resolution is capped where its cell count passes 2^63 - 1, the
+  largest integer64: on the icosahedron aperture 3 keeps resolutions 0-30,
+  aperture 4 stops at 29 and aperture 7 at 21 (on the octahedron, aperture 4
+  reaches 30). `hex_grid()` names the finest resolution when asked for a finer
+  one, and an `area_km2` finer than that clamps to it. Aperture 7's Z7 index
+  strings, previously limited to resolution 20, follow the grid to 21.
+
+* `plot_globe()` is removed. `plot(<grid>)` draws a grid in 3D, on the sphere
+  (`surface = "sphere"`) or on the flat faces of the solid the grid is
+  built on (`surface = "solid"`), with land fill and country outlines
+  from `hexify_world` or any sf polygons (`land =`), a `center` to look down
+  on, and the solid's face edges. It takes the grid object, so any
+  aperture, mixed sequence, resolution, solid or body reaches it; an H3 grid
+  is drawn on the sphere. `globe_centers` names the views as before.
+
+* A grid built with one aperture per level stores it comma-separated:
+  `hex_grid(resolution = 4, aperture = c(4, 4, 7, 3))@aperture` is
+  `"4,4,7,3"`, no longer `"4/4/7/3"`; `aperture = "4,4,7,3"` is accepted and
+  "/" is kept for the two-aperture families such as `"4/3"`. A two-level
+  sequence `c(4, 7)` was stored as `"4/7"`, the family name, so its parents
+  were cells of the family's resolution-1 grid (aperture 7) rather than of its
+  own first level (aperture 4). Cell IDs are unchanged. `get_children()` on a
+  per-level grid now says that the spelling names no finer level.
+
+* The aperture-7 Z7 index on the icosahedron is now IGEO7's, string for
+  string the one DGGRID writes: every cell at resolutions 0 to 7 agrees with
+  DGGRID, on ISEA and FULLER and under a given orientation
+  (`paper/bench/bench_dggrid_z7.R`). Previously about two cells in three
+  differed: a cell whose ancestry leaves its quad was written as quad + 12 *
+  seed instead of the base cell it descends from, and the digits were not
+  turned into a polar base cell's frame or past the direction each pentagon
+  lacks. DGGRID's encoder is bijective: the two cells #53 reported as sharing
+  a string get distinct strings from it, so that report came from hexify's
+  own earlier port, not from DGGRID. The axis names of digits 3 to 6 were
+  also swapped in hexify, which turned digit rotations the wrong way. A
+  pentagon has six children, so `hexify_get_children()` returns six strings
+  under one, and `hexify_z7_canonical()` sends a string in the deleted
+  subsequence to the cell's own index. Cell IDs are unchanged. Octahedral
+  grids keep the quad + 6 * seed leading field, since IGEO7 is defined on the
+  icosahedron (#86).
+
+* `hexify_cell_id_to_quad_ij()` is removed. `hexify_cell_to_quad_ij()` takes
+  the same arguments and returns the same `quad`, `i`, `j` data frame.
+
+* The inverse of Snyder's projection is now in closed form (Recht 2021), so
+  `hexify_set_precision()`, `hexify_get_precision()`, `hexify_set_verbose()`
+  and `hexify_projection_stats()` are removed, and `hexify_inverse()` no
+  longer takes `tol` or `max_iters`. The inverse agrees with the previous
+  Newton iteration to within 1e-13 radians on the icosahedron, octahedron and
+  tetrahedron, returns a forward-projected point to within a few times 1e-15
+  radians, and is about twice as fast (#84).
+
+## New features
+
+* `hex_grid(projection = "ivea")` builds a grid on van Leeuwen and Strebe's
+  (2006) vertex-oriented great-circle projection, the third face projection
+  beside Snyder's and Fuller's: DGGAL's IVEA3H and IVEA7H, and any aperture,
+  aperture sequence, orientation, the octahedron, and `hex_globe()`. It is
+  equal-area, so `cell_area()` gives every hexagon of a resolution the same
+  area, and its inverse is in closed form. With DGGAL's orientation
+  (`orientation = c(11.20, 58.282525588538995, 0)`) every zone of IVEA3H at
+  levels 1 to 8 and of IVEA7H at levels 1 to 5 is a hexify cell, centres and
+  corners within a micrometre (`paper/bench/bench_dggal_agreement.R`).
+  `hexify_forward()` and `hexify_inverse()` take it on the tetrahedron too.
+  DGGRID has no IVEA, so `as_dggrid()` refuses such a grid (#92).
+
+* `projection_distortion()` gives Tissot's indicatrix of a grid's face
+  projection at any point: the scale factors, the maximum angular
+  deformation, the areal scale and the direction of the longer axis. The
+  derivative is exact, from forward-mode automatic differentiation of the
+  projection code. Snyder's projection reproduces his Table 1 (17.27 degrees,
+  scale factors 1.163 and 0.860) and keeps areas to 1e-14; Fuller's areal
+  scale averages 1. `plot(<grid>, distortion = "angular" / "areal")` colours
+  the sphere, the solid or a net by it, and `tissot =` draws the ellipses on
+  the solid and the net (#88).
+
+* Densified cell boundaries, the cell paths `plot()` draws and the globe's
+  face and land meshes put a vertex where an edge crosses an arc from a face
+  centre to a corner, where Snyder's projection bends, and densified
+  boundaries also where they cross a face edge (#88).
+
+* `plot(<grid>, parents = )` outlines the cells one or more resolutions up
+  over the grid's cells; on a net, `area_legend = TRUE` draws one cell of
+  each resolution at the map's scale with its area, and `tabs = TRUE` adds
+  glue tabs along the seams so a printed net folds into the solid (#90).
+
+* `hex_rays()` draws Carr's ray glyphs, whose angle shows a value, with
+  confidence arcs and a second ray for a second variable, and
+  `hex_triangles()` cuts cells into one triangle per wall carrying the change
+  towards that neighbour (#90).
+
+* `net_cells()` cuts cells into their parts on the pieces of a net layout,
+  with each part's map area and which parts the map shows joined, so the
+  cells a seam cuts can be counted; on Snyder's projection the parts of a
+  cell add up to its area (#90).
+
+* `hex_grid(polyhedron = "octahedron")` builds an ISEA-family grid on the
+  octahedron: Snyder's equal-area projection with g = 54.73561032 deg, G = 45
+  deg (Snyder 1992), four diamonds, and six square vertex cells, each two
+  thirds of a hexagon's area. Apertures 3, 4, 7 and mixed sequences, the
+  hierarchy, indices, neighbours, `cell_area()`, `plot()` and `hex_globe()`
+  work as on the icosahedron. The solid is a descriptor (vertices, faces,
+  Snyder's constants) from which the face pairing, the quad adjacency and
+  the vertex cells are derived, so the icosahedron's grids are unchanged
+  bit for bit. Fuller's projection stays icosahedron-only (#94).
+
+* `hexify_forward()`, `hexify_inverse()`, `hexify_which_face()`,
+  `hexify_face_centers()` and `hexify_lonlat_to_plane()` take
+  `polyhedron = "octahedron"` or `"tetrahedron"`. The tetrahedron carries the
+  projection only, and `hex_grid(polyhedron = "tetrahedron")` says why: the
+  cell numbering pairs faces into diamonds that leave exactly two vertices as
+  single-cell poles, a vertex where three faces meet has to be one of them,
+  and all four vertices of the tetrahedron are such vertices.
+
+* `cell_to_sf(shape = , depth = )` draws ISEA cells as Gosper islands
+  (`"gosper"`) or as the outline of their descendants (`"descendants"`);
+  `plot()`, `hexify_heatmap()` and `st_as_sf()` on gridded data take the same
+  arguments. A Gosper island replaces each cell edge `depth` times by three
+  segments `1/sqrt(7)` as long, turned by `atan(sqrt(3)/5)`, on the face plane
+  of the projection, so on an equal-area grid each island has its cell's area
+  and the islands of a grid tile the sphere. The descendant outline of an
+  aperture-7 cell is the boundary of its descendants `depth` resolutions down,
+  which nests across resolutions; the child lattice of ISEA7H turns one way at
+  one resolution and back at the next, so this outline stays close to the
+  hexagon (#82).
+
+* `get_children()` on ISEA grids looks children up by `match()` rather than by
+  name, so its time grows linearly with the number of cells: all 492 cells of
+  an aperture-7 resolution-2 grid, three levels down, go from 123 s to 0.5 s.
+
+* `hex_grid(projection = "fuller")` builds an ISEA-family grid on Fuller's
+  projection instead of Snyder's equal-area one: DGGRID's FULLER3H,
+  FULLER4H, FULLER7H and FULLER43H, and any aperture sequence or orientation.
+  The forward projection follows Gray (1995) and the inverse solves Gray's
+  equation (39) in Crider's (2008) form in closed form, as a cubic solved
+  by Viete's trigonometric method (#96). Cell IDs, the
+  hierarchy and neighbours are those of the ISEA grid; centres and corners
+  agree with DGGRID's FULLER output. Fuller cells are not equal-area, so
+  `area_km2` is the mean cell area and `cell_area()` returns each cell's own,
+  from its solid angle. `hexify_forward()`, `hexify_forward_to_face()` and
+  `hexify_inverse()` take `projection`, `as_dggrid()` and `from_dggrid()`
+  carry FULLER, `dggrid_is_compatible()` accepts it, and `hex_globe()` finds
+  Fuller cells per pixel as it does ISEA cells.
+
+* `hex_globe(<grid>)` draws a grid on an interactive globe, rendered on the
+  graphics card through WebGPU (an htmlwidget; needs 'htmlwidgets'). Drag turns
+  the globe, Shift-drag tilts and turns the view, the wheel zooms, and a
+  slider folds the icosahedron into the sphere. `values` fills the cells
+  through a colour ramp (`palette`, `limits`, `na_fill`). It takes the camera
+  and style arguments of `plot(<grid>)`. The cells of an ISEA grid are found
+  per pixel on the graphics card, with `lonlat_to_cell()`'s projection and
+  numbering, so the page carries the grid's description and one value per
+  cell rather than cell outlines: at aperture 3, resolution 10 (590,492
+  cells), a globe with a value on every cell builds in 0.4 s, its page is
+  7 MB and a frame takes about 3 ms at 800 and at 1600 pixels. The shader's
+  cells agree with `lonlat_to_cell()` to within 1e-5 radians. Borders keep
+  their width at every zoom and fade out where cells shrink to a few pixels.
+  The pointer shows the ID and value of the cell under it. H3 cells are drawn
+  from their outlines. Without WebGPU the widget shows a notice.
+
+* `hex_globe_png()` saves a globe as a PNG, drawn with the widget's own
+  WebGPU shader and pipelines and read back from the graphics card, so a
+  machine without a display saves the globe rather than a blank page; pixels
+  off the globe are transparent. `renderer = "wgpu"` (the default) draws
+  through the companion package 'hexglobe' ('wgpu', the Rust WebGPU
+  implementation) with no browser; `renderer = "chrome"` draws the widget in
+  headless Chrome (needs 'chromote'). The two agree to within edge
+  anti-aliasing (#107).
+
+* The article "Interactive Globe" on the package website shows `hex_globe()`
+  live and lists the browsers that draw it. The globe keeps its colours in the
+  site's dark mode.
+
+* Land is triangulated on the faces of the icosahedron in C++, so filled land
+  folds with the grid; the land area of the mesh matches `sf::st_area()` of
+  `hexify_world`.
+
+* Both surfaces read their cell boundaries from the same points: each cell
+  edge is walked in the face plane, where it is straight, and cut where it
+  crosses a face edge, so a cell on the icosahedron is the cell on the sphere
+  folded flat.
+
+* `plot(<grid>)` takes a viewpoint. `projection = "perspective"` places a
+  camera `distance` sphere radii from the centre, `tilt` swings it about the
+  point at `center`, which it keeps looking at, until the horizon shows, and
+  `fov` sets its field of view; by default the frame holds the whole visible
+  sphere. `rotation` turns either projection about the line of
+  sight. Filled shapes are clipped at a plane in front of the camera, so any
+  tilt below 90 degrees draws.
+
+* `hex_grid(orientation = )` places an ISEA grid's icosahedron anywhere on
+  the sphere (#80): `c(vert0_lon, vert0_lat, azimuth)` as DGGRID's
+  `dggs_vert0_lon`, `dggs_vert0_lat` and `dggs_vert0_azimuth` take it,
+  `"random"` (repeatable with `set.seed()`), or `"region"` with `region =` a
+  point or an sf object, which centres the grid as DGGRID's `REGION_CENTER`
+  does (on the midpoint of an icosahedron edge), or `"face"` with `region =`,
+  which puts the region's centre on the centre of a face. The grid stores it in a new `orientation` slot, and every function
+  taking the grid reads it, the `hex_globe()` shader included; grids saved
+  before the slot existed read the standard orientation. Cell IDs, the
+  hierarchy and neighbours are the same under every orientation. Under three
+  given orientations and three region placements, 50,000 random points per
+  grid fall in the same cells as in DGGRID for apertures 3, 4, 7, ISEA43H and
+  a mixed sequence, with cell centres within 2 mm. H3 grids keep H3's own
+  orientation.
+
+* `as_dggrid()`, `from_dggrid()` and `dggrid_is_compatible()` carry the
+  orientation (`pole_lon_deg`, `pole_lat_deg`, `azimuth_deg`) instead of
+  warning about or rejecting a non-standard one.
+
+* `hexify_build_icosa()` sets the orientation of the functions that take no
+  grid, and no longer reaches grids; `hex_grid()` and `hexify_grid()` no
+  longer reset it.
+
+* `hex_grid(orientation = "dymaxion")` places the icosahedron in Fuller's
+  Dymaxion orientation (#89; Sahr et al. 2003): vertex 0 at 5.2454W, 2.3009N,
+  azimuth 7.46658, with all twelve pentagons in the ocean. With
+  `projection = "fuller"` the grid lies on Fuller's Dymaxion map.
+
+* New `net_layout()` lays out the faces of a grid's solid as a flat map, and
+  `plot(<grid>, surface = "net", layout = )` draws on it (#83). A layout cuts
+  faces into pieces and places each by a rotation and a translation, so a
+  piece can appear more than once. `"plane"` is DGGRID's PLANE layout, as
+  before; `"gosper"` is Van de Sande's Gosper World on the octahedron, four
+  regular hexagons each of one face and a third of its three neighbours,
+  equal-area on Snyder's projection; `"gosper_flower"` surrounds one hexagon
+  by the six that border it; `"gosper_land"` joins the four hexagons along the
+  sides that cross the most land, as in Van de Sande's Fig. 1; `"rhombic"` is
+  DGGAL's 5 x 6 rhombic space on the icosahedron, each face sheared onto half
+  a unit square; `"land"` cuts the solid along the edges that
+  cross the least land, a Dymaxion-style net with
+  `orientation = "dymaxion", projection = "fuller"`. `net_project()` places
+  points on a layout. `seams = TRUE` draws the cuts of the net.
+
+* `hex_grid(polyhedron = "octahedron", orientation = "gosper")` puts the poles
+  at midpoints of octahedron edges, as the Gosper World does, with all six
+  vertices at least 619 km offshore.
+
+* `plot(<grid>, graticule = )` draws meridians and parallels on the sphere,
+  the solid and the net.
+
+* New `cell_metrics()` and `wall_metrics()` measure a grid's cells: area,
+  perimeter and compactness (White et al. 1998) per cell, and per wall
+  between adjacent cells its length, the distance between the two centres and
+  the cell wall midpoint ratio (Gregory et al. 2008). Without `cell_id` they
+  measure every cell of the grid. ISEA walls are followed on the sphere as the
+  projection curves them, for Snyder's and Fuller's projections alike, each
+  piece halved until its length and area agree measured whole and as two
+  halves: perimeters come out within about 1e-10 of their converged values
+  and areas within about 1e-9, at a tenth of a millisecond to a millisecond
+  per cell. H3 walls are read from H3's
+  directed edges.
+
+* New `hex_smooth()` smooths cell values over neighbouring cells (#90): each
+  step replaces a value by the weighted mean of the cell and its listed
+  neighbours, the neighbour-matrix smoother of Carr et al. (1997). `group`
+  keeps groups such as land and ocean apart; `NA` values and unlisted cells
+  do not contribute.
+
+* Zone queries of OGC Topic 21 (#105). `get_parent(overlapping = TRUE)`
+  returns every coarser cell a cell reaches into (Topic 21's `parent()` with
+  `inheritID` false): three for an aperture-3 cell on a parent corner, two
+  for an aperture-4 cell on a parent edge or an aperture-7 cell off the
+  parent's centre. `get_siblings()` returns the other children of a cell's
+  parent, and `get_neighbors(ring = TRUE)` the hollow ring of cells exactly
+  `k` hops away.
+
+* `hex_grid()` reads an aperture list shorter than the resolution as a
+  recurring sequence, as Topic 21 reads its list of refinement ratios:
+  `aperture = c(4, 3)` at resolution 5 refines by 4, 3, 4, 3, 4 (#105).
+
+* `dggrs_definition()` describes a grid in the DGGRS definition schema of OGC
+  API - DGGS: solid, refinement ratios and strategy, zone shapes, orientation,
+  zone identifiers and sub-zone order (#105).
+
+* `cell_metrics()` adds `normalized_area`, a cell's area over the grid's mean,
+  and `ipq`, the isoperimetric quotient 4 pi A / p^2, the two measures of
+  Kmoch et al. (2022) (#106).
+
+* The article "OGC Topic 21 Conformance" sets hexify against each
+  requirement of Topic 21, with the Earth model and its area error on WGS84,
+  the distance between cell centre and area centroid, and how often binning
+  and taking the parent disagree with binning at the parent's resolution
+  (#105, #106).
+
+## Bug fixes
+
+* `grid_global()` returns every cell of an ISEA grid. It sampled points and
+  kept the cells they hit, which missed small polar cells from about 40,000
+  cells on: 2 of 40,962 cells at aperture 4 resolution 6, 54 of 168,072 at
+  aperture 7 resolution 5. It now lists the cell IDs 1 to n.
+
+* `get_parent()` on a mixed aperture grid finds the parent in exact lattice
+  coordinates (#85). After an aperture-3 step a child centre sits on a
+  corner of three parents, and after an aperture-4 step on an edge shared by
+  two; the parent of such a child was decided by floating-point rounding of
+  the projected centre, so a hexagonal parent received anywhere from 1 to 7
+  children. A fixed tie rule now gives every hexagonal parent inside a quad
+  exactly as many children as the step's aperture. Children whose centre
+  lies strictly inside a parent keep their parent. `get_children()` and
+  `cell_to_index()` follow `get_parent()`, so index strings of mixed grids
+  change for the tied children; regenerate stored ones. `levels > 1` steps
+  up one level at a time.
+
+* Cells in the last column of a quad at aperture 3, resolutions 25-30, were
+  assigned to another quad: the quad edge dimension was computed in floating
+  point and came out one too small. It is now exact.
+
+* `cell_area()` on an ISEA grid returns each cell's area: every hexagon of a
+  resolution has `S / (N - 2)` of a body of area `S` split into
+  `N` cells, and each of the 12 pentagons 5/6 of that. It returned the
+  mean `S / N` for every cell. The `cell_area_km2` column of a HexData
+  object and of `as.data.frame()` reads `cell_area()`, so it carries the same
+  areas, on the Fuller projection each cell's own.
+
+* `hexify_world` is simplified as a coverage, so neighbouring countries share
+  their simplified borders exactly. It was simplified country by country,
+  which left about 480 slivers of gap between neighbours; they showed as thin
+  lines wherever land was filled without country outlines. Attributes are
+  unchanged.
+
+* A cell at an icosahedral vertex now drops the corner that lies in the
+  icosahedron's angular deficit, found from the faces rather than a fixed
+  corner number. Under the lattice turn of a mixed sequence such as
+  `c(4, 4, 7, 3)` the fixed number named the wrong corner, and those twelve
+  pentagons were drawn with a corner read off the wrong face.
+
+* On a mixed aperture sequence with an odd number of aperture-7 levels
+  (`"4/7"` at odd resolutions, `c(4, 4, 7, 3)`, `c(7, 3)`, ...), the cell
+  lattice is turned by atan(sqrt(3)/5) and its cells straddle the quad edges,
+  so a point near an edge can have its nearest centre in the next quad.
+  `lonlat_to_cell()` clamped that centre back onto the quad and read it as an
+  unrelated cell: 2,500 to 4,200 boundary points per grid went to the wrong
+  cell, and `grid_global()` missed a cell of `c(4, 4, 7, 3)` and of
+  `c(4, 3, 7)`. The centre now moves to the quad that owns it through
+  DGGRID's edge table, as pure aperture 7 already did.
+
+* At odd aperture-3 resolutions, a point on or just across an icosahedron
+  face edge could quantize to a centre two rows outside its quad, which
+  `lonlat_to_cell()` read as an unrelated cell (often a pentagon). Such
+  centres now go through the same edge table. Points away from face edges
+  keep their cells.
+
+* The Snyder projection constants are computed from their closed forms at
+  full double precision (tan θ = 3 - sqrt(5), a face edge of
+  sqrt(4π / (5 sqrt(3))), R' = edge / (sqrt(3) tan θ), vertex latitude
+  atan(1/2)) instead of being carried to 8 to 10 digits, and the icosahedron's
+  vertices are rotated into place on unit vectors, which places them to
+  4e-16 where they were off by 1e-8. Cell assignments move only for points
+  within about 1e-8 rad (6 cm) of a cell boundary: 2 of 3.8 million random
+  points across 19 grids.
+
+* Forward and inverse projection put an azimuth that lies exactly on a
+  120° sector boundary, a line from a face centre through a vertex, in
+  different sectors, so the inverse returned such a point on the mirrored
+  side of the face. Both now read one half-open sector rule. A point on a
+  face edge now gets one of the two cells beside it at every resolution.
+
+# hexify 0.8.4
+
+## Breaking changes
+
+* ISEA cell polygons follow the true cell edges. An edge is straight in the
+  projection plane and curved in lon/lat, so `cell_to_sf()`, `grid_rect()`,
+  `grid_global()`, `hexify_cell_to_sf()` and the plot methods now split each
+  edge until every piece is a straight lon/lat chord to within 0.1% of its
+  length, as DGGRID's densification does. Drawn with their six (or five)
+  corners alone, cells were off by up to 4% of their area at aperture 3
+  resolution 8 and up to 19% at coarse resolutions; now within about 0.1%. A polygon now has
+  six corners and the points between them, so a cell's vertex count is no
+  longer six; the corners themselves are unchanged.
+
+## Bug fixes
+
+* At odd aperture-7 resolutions, `lonlat_to_cell()`, `hexify()` and the index
+  functions gave a point near a cell edge to a neighbouring cell: 7 to 11% of
+  random points over central Europe at resolutions 2 to 7. A point was snapped to the finer
+  substrate lattice and then to that point's parent, so a cell was the union
+  of seven substrate hexagons rather than a hexagon. Points now go to the cell
+  whose centre is nearest, the hexagon its polygon draws, which changes the
+  cell ID of those points.
+
+* A cell straddling a quad edge was drawn with the corners beyond the edge
+  read on its centre's face stretched across it, and an icosahedral-vertex
+  cell with its folded edge drawn straight across the missing sector. Both
+  are now drawn where `lonlat_to_cell()` places their boundary.
+
+* `grid_rect()` on ISEA grids missed cells that intersect the bounding box, mostly
+  along its edges and occasionally inside it. It now seeds from a point sampling and
+  grows through neighbouring cells that meet the box until none is added, so the
+  result is every cell meeting the box, independent of the sampling density (#77).
+  `hexify_grid_rect()` had its own copy of the sampling and now calls `grid_rect()`.
+
+# hexify 0.8.3
+
+## Breaking changes
+
+* `as_sf()` is now `sf::st_as_sf()`. sf owns the verb, so hexify registers
+  methods on it for `HexData` and `HexGridInfo` and re-exports it, and an sf
+  pipeline reaches a hexify object without knowing hexify's own name for the
+  conversion. `st_as_sf()` on a grid specification returns its global cell set.
+  The `geometry` argument follows `...`, as the generic's signature requires, so
+  name it: `st_as_sf(x, geometry = "polygon")`.
+
+* The index entry points that returned one value now return one per index:
+  `hexify_index_to_cell()` and `hexify_index_to_lonlat()` a data frame with a
+  row per index, `hexify_get_children()` a list with an element per index.
+  Reading a single index out of them takes `[[1]]` or `[1, ]`.
+
+## New features
+
+* `summary()` on a grid or on gridded data returns what printing it reports, as
+  a list: grid type, aperture, resolution, area, diagonal, CRS, radius and cell
+  count for a grid; row and column counts, column names, cell count, storage
+  type and the grid's own summary for data. Printing an object prints this
+  summary, so what it shows and what it returns are the same thing.
+
+## Bug fixes
+
+* `get_children()` returned cell IDs past the end of the child grid on apertures
+  3 and 4, and `NA`s on aperture 7, at the twelve icosahedron vertices, so
+  `get_parent()` stopped on its own output there. A vertex sits at the corner of
+  several quads and has an index spelling in each, and appending a digit to one
+  spelling names cells the other quads hold: some digits named nothing, and the
+  children spelled under another quad were never reached. Children are now read
+  back from `get_parent()` over candidates drawn from both the index expansion
+  and the ring of child cells around the parent, so they invert `get_parent()`
+  exactly. Between them the parents of a resolution now claim every cell of the
+  child grid once, and an aperture-7 pentagon has six children rather than five
+  and two `NA`s.
+
+* `hex_compact()` and `hex_uncompact()` refused every ISEA grid but aperture 7,
+  and did their arithmetic on the index strings. Both read cells now, so all
+  three pure apertures compact: cells are grouped by `get_parent()`, and a
+  group holding as many distinct cells as the parent has children replaces
+  them, which reads the six children of a cell at an icosahedron vertex rather
+  than assuming seven. Uncompaction expands through `get_children()` for the
+  same reason, so the children spelled under a neighbouring quad are reached.
+  An index string that names no cell of the grid, which appending a digit to a
+  vertex cell writes, is refused by name rather than reported as a cell number
+  the caller never wrote. A full grid compacts to the twelve resolution-0 cells
+  at every aperture.
+
+* `get_parent()` on an aperture-7 grid at resolution 1 returned cell IDs past
+  the end of the resolution-0 grid -- up to 83, where resolution 0 holds 12 --
+  and only 42 distinct ones, so `get_children()` at resolution 0 came back in
+  threes rather than sixes. A Z7 index spells its leading field as
+  `quad + 12 * seed`, the seed naming the point the hierarchy walk arrives at,
+  and a two-character index was read as a bare quad number. It is decoded now:
+  the seed says which of the base cells meeting at the quad's corner the index
+  reaches, through the same adjacency the encoder walks. Every resolution-0 cell
+  sits on an icosahedron vertex and now has the six children that make up
+  resolution 1's 72, at every aperture the parents of a resolution claim each
+  cell of the finer one exactly once, and a full grid compacts to the twelve
+  resolution-0 cells at apertures 3, 4 and 7 rather than stopping at 52.
+
+* `hexify_lonlat_to_index()` documented itself as vectorised over `lon` and
+  `lat` and took one point, and nothing that consumes an index string accepted
+  the vector `cell_to_index()` returns: `hexify_index_to_cell()`,
+  `hexify_index_to_lonlat()`, `hexify_get_parent()`, `hexify_get_children()`,
+  `hexify_get_resolution()`, `hexify_compare_indices()` and
+  `hexify_z7_canonical()` each stopped on Rcpp's own scalar-coercion message,
+  which named no hexify function and no argument. Every index entry point takes
+  vectors now and loops in C++, so a caller pays one call rather than one per
+  element, and a missing coordinate or index carries through as a missing
+  result. Arguments read in step whose lengths differ are named, with the
+  function they were passed to.
+
+* `hex_distance()` over-reported the hop count between cells of one quad, by up
+  to three times, and at aperture 7 also under-reported it by half. It read the
+  difference of the two cells straight off the substrate the cell IDs are packed
+  on, which is the cell lattice only some of the time: at aperture 3's odd
+  resolutions one substrate point in three is a cell and the six neighbours
+  stand `sqrt(3)` substrate units apart, so a step was counted as three. The
+  handedness of the axial formula was wrong as well. The difference is now
+  divided by the lattice generator first, which reads it in cell steps, and the
+  six neighbours are the six units there. Every adjacent pair of cells is one
+  hop apart at apertures 3, 4 and 7, and the distances agree with breadth-first
+  search over `get_neighbors()`.
+
+* `get_neighbors()` and `hex_distance()` read a grid's aperture as a single
+  number, which is `NA` for a sequence spelling, so every grid built from one --
+  `"4/3"`, `"4/7"` or a per-level vector -- stopped on a coerced-aperture
+  message while every other operation on it worked. One walk now serves both:
+  it takes what a quad edge measures, which substrate lattice the cells sit on,
+  and how a quad coordinate maps to and from the plane, and a pure aperture and
+  a sequence differ only in those. A mixed grid has the twelve cells with five
+  neighbours and six everywhere else that a pure one has, at every sequence and
+  resolution tested, and its distances agree with breadth-first search.
+
+* `grid_clip()`, `hex_zonal()` and `hex_extract()` stopped on a grid built for
+  another body, with sf's own `st_crs(x) == st_crs(y) is not TRUE`, which names
+  neither the function nor the boundary nor the radius that separates them. A
+  boundary and a grid on two bodies are now reconciled in one place: two CRSs on
+  the same body reproject as before, and where the bodies differ, longitude and
+  latitude name the same region on either sphere, so a lon/lat boundary is read
+  in the grid's own CRS and the caller is told which two CRSs met. A projected
+  CRS carries lengths that do not carry over, and is refused with both named.
+  `hexify()` read sf coordinates the same way, transforming them to WGS84
+  whatever body the grid was on, and now reads them on the grid's own.
+
+* The `grid_clip()` and `plot_grid()` examples asked for France and got a third
+  of the globe: the world map's France carries the overseas departements, and
+  both functions cover the bounding box of what they are given, which for all of
+  France runs from -62 to 56 degrees of longitude. That built 36707 cells to
+  draw metropolitan France. The examples crop to the metropolitan extent, which
+  is what they meant, and together they now take under a second rather than
+  fifty.
+
+* `as_dggrid()` on a grid built for another body returned a dggs that read as
+  an Earth grid, and said nothing. A dggs has no field for the radius, so the
+  conversion warns and names the radius being dropped. `from_dggrid()` is the
+  same boundary in reverse and takes a `radius_km` argument, defaulting to
+  Earth, so a grid on another body round-trips.
+
+* `hexify_heatmap()` handled an RColorBrewer palette only between three levels
+  and the palette's own length. A `breaks` argument with ten or more bins passed
+  fewer colours than the scale needed and stopped in ggplot2, naming ggplot2
+  rather than the palette; fewer than three bins let RColorBrewer's own warning
+  through. The palette is now taken at exactly the number of levels asked for,
+  by interpolating over its full range past its length, and it matches
+  `RColorBrewer::brewer.pal()` colour for colour within it.
+
+* A `colors` name in neither the viridis nor the RColorBrewer family was passed
+  to viridisLite, which drew the default palette and warned about its own
+  argument. It is an error now, naming both families.
+
+* `n_cells()` had no `HexGridInfo` method, so asking a grid how many cells it
+  holds stopped on dispatch while printing the grid reported exactly that
+  number. Both read one function now. On a `HexData` the count is still the
+  number of distinct cells its rows fall in.
+
+* `tibble::as_tibble()` on a `HexData` reached tibble's default method and
+  stopped there, unable to coerce an S4 object. `as_tibble.HexData()` was
+  exported rather than registered, so dispatch never found it. It is registered
+  on tibble's generic now, and tibble stays in Suggests.
+
+* `cell_to_sf()` returned an empty polygon for every cell whose boundary lay
+  within two degrees of a pole, which from resolution 4 at aperture 7 and
+  resolution 5 at aperture 4 is each cell nearest the poles. Corners inside
+  that band were snapped onto the pole, so once a cell was narrower than the
+  band all of its corners landed on one point. A pole falls inside a cell or on
+  a cell edge, never on a corner, and corners now keep the position the inverse
+  projection gives them.
+
+* `grid_global()` emitted GDAL errors and returned an invalid geometry for the
+  cells that cover a pole. The ring of such a cell winds once around the globe,
+  which no lon/lat ring closes, and `sf::st_wrap_dateline()` joined the two
+  halves it cut along a line of constant latitude, across the cell's own edges.
+  The ring is now cut at the antimeridian and carried up to the pole, the way a
+  polar cap is drawn in lon/lat.
+
+* A cell split at the antimeridian keeps its shape. The cut ends were joined
+  along a line of constant latitude, which is not where the cell's edge runs and
+  moved as much as a tenth of the area of a cell at the seam. The ring now
+  carries a corner on its own edge where it meets +/-180, and a cell covers the
+  same area whether or not it is split.
+
+* Cell rings cross the antimeridian by carrying their longitudes on
+  continuously rather than by shifting the negative ones, which placed a ring
+  spanning exactly half the globe on both sides of the map at once. Only cells
+  reaching past +/-180 go to `sf::st_wrap_dateline()`, which cuts any segment
+  half a turn wide and so also split the edge a cell runs over a pole.
+
 # hexify 0.8.2
 
 ## Bug fixes

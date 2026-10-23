@@ -46,9 +46,19 @@ test_that("from_dggrid warns on unsupported projection", {
     res = 5L,
     aperture = 3L,
     topology = "HEXAGON",
-    projection = "FULLER"
+    projection = "GNOMONIC"
   )
-  expect_warning(from_dggrid(dggs), "Only ISEA projection")
+  expect_warning(from_dggrid(dggs), "ISEA and FULLER")
+})
+
+test_that("from_dggrid and as_dggrid carry the FULLER projection", {
+  dggs <- list(res = 5L, aperture = 4L, topology = "HEXAGON", projection = "FULLER")
+  grid <- from_dggrid(dggs)
+  expect_equal(grid$projection, "FULLER")
+  g <- extract_grid(grid)
+  expect_equal(g@projection, "fuller")
+  expect_equal(as_dggrid(g)$projection, "FULLER")
+  expect_true(dggrid_is_compatible(dggs))
 })
 
 test_that("from_dggrid warns on unsupported topology", {
@@ -71,23 +81,24 @@ test_that("from_dggrid rejects unsupported aperture", {
   expect_error(from_dggrid(dggs), "Aperture 5 not supported")
 })
 
-test_that("from_dggrid warns on non-default orientation", {
+test_that("from_dggrid carries the orientation", {
   dggs <- list(
     res = 5L,
     aperture = 3L,
     topology = "HEXAGON",
     projection = "ISEA",
-    pole_lon_deg = 0
+    pole_lon_deg = -20,
+    pole_lat_deg = 10,
+    azimuth_deg = 45
   )
-  expect_warning(from_dggrid(dggs), "Non-default pole_lon_deg")
+  grid <- extract_grid(from_dggrid(dggs))
+  expect_equal(unname(grid@orientation), c(-20, 10, 45))
 
+  # DGGRID writes the standard latitude to eight decimals
   dggs$pole_lon_deg <- 11.25
-  dggs$pole_lat_deg <- 0
-  expect_warning(from_dggrid(dggs), "Non-default pole_lat_deg")
-
-  dggs$pole_lat_deg <- 58.282525588538995
-  dggs$azimuth_deg <- 45
-  expect_warning(from_dggrid(dggs), "Non-default azimuth_deg")
+  dggs$pole_lat_deg <- 58.28252559
+  dggs$azimuth_deg <- 0
+  expect_identical(extract_grid(from_dggrid(dggs))@orientation, ISEA_ORIENTATION)
 })
 
 test_that("dggrid_is_compatible validates compatible grids", {
@@ -105,8 +116,8 @@ test_that("dggrid_is_compatible rejects incompatible grids (strict=TRUE)", {
   expect_error(dggrid_is_compatible("not a list"), "not compatible")
 
   # Wrong projection
-  dggs <- list(aperture = 3L, topology = "HEXAGON", projection = "FULLER")
-  expect_error(dggrid_is_compatible(dggs), "ISEA projection")
+  dggs <- list(aperture = 3L, topology = "HEXAGON", projection = "GNOMONIC")
+  expect_error(dggrid_is_compatible(dggs), "ISEA or FULLER")
 
   # Wrong topology
   dggs <- list(aperture = 3L, topology = "DIAMOND", projection = "ISEA")
@@ -118,21 +129,34 @@ test_that("dggrid_is_compatible rejects incompatible grids (strict=TRUE)", {
 })
 
 test_that("dggrid_is_compatible returns FALSE for incompatible grids (strict=FALSE)", {
-  dggs <- list(aperture = 3L, topology = "HEXAGON", projection = "FULLER")
+  dggs <- list(aperture = 3L, topology = "HEXAGON", projection = "GNOMONIC")
   expect_false(dggrid_is_compatible(dggs, strict = FALSE))
 
   dggs <- list(aperture = 3L, topology = "DIAMOND", projection = "ISEA")
   expect_false(dggrid_is_compatible(dggs, strict = FALSE))
 })
 
-test_that("dggrid_is_compatible detects non-default orientation", {
+test_that("dggrid_is_compatible accepts any orientation on the sphere", {
   dggs <- list(
     aperture = 3L,
     topology = "HEXAGON",
     projection = "ISEA",
-    pole_lon_deg = 0
+    pole_lon_deg = 0,
+    pole_lat_deg = 90,
+    azimuth_deg = 30
   )
-  expect_error(dggrid_is_compatible(dggs), "pole_lon_deg")
+  expect_true(dggrid_is_compatible(dggs))
+
+  dggs$pole_lat_deg <- 95
+  expect_error(dggrid_is_compatible(dggs), "pole_lat_deg")
+})
+
+test_that("round-trip: hex_grid -> dggridR -> hex_grid keeps the orientation", {
+  grid <- hex_grid(resolution = 6, orientation = c(30, -45, 100))
+  dggs <- as_dggrid(grid)
+  expect_equal(c(dggs$pole_lon_deg, dggs$pole_lat_deg, dggs$azimuth_deg),
+               c(30, -45, 100))
+  expect_equal(extract_grid(from_dggrid(dggs))@orientation, grid@orientation)
 })
 
 test_that("round-trip: hexify_grid -> dggridR -> hexify_grid", {
@@ -142,4 +166,35 @@ test_that("round-trip: hexify_grid -> dggridR -> hexify_grid", {
 
   expect_equal(original$resolution, recovered$resolution)
   expect_equal(original$aperture, recovered$aperture)
+})
+
+test_that("as_dggrid warns that a dggs cannot carry a body radius", {
+  grid <- hex_grid(area_km2 = 100000, radius_km = "mars")
+
+  expect_warning(dggs <- as_dggrid(grid), "carries no body radius")
+  expect_warning(as_dggrid(grid), "3389.5")
+
+  # The rest of the conversion still happens
+  expect_s3_class(dggs, "dggs")
+  expect_equal(dggs$res, grid@resolution)
+})
+
+test_that("as_dggrid converts an Earth grid without warning", {
+  expect_no_warning(as_dggrid(hex_grid(area_km2 = 100000)))
+  expect_no_warning(as_dggrid(hexify_grid(area = 1000, aperture = 3)))
+})
+
+test_that("from_dggrid reads Earth unless told otherwise", {
+  dggs <- suppressWarnings(as_dggrid(hex_grid(area_km2 = 100000, radius_km = "mars")))
+
+  earth <- from_dggrid(dggs)
+  expect_equal(hexify:::grid_radius_km(earth), hexify:::EARTH_RADIUS_KM)
+
+  mars <- from_dggrid(dggs, radius_km = "mars")
+  expect_equal(hexify:::grid_radius_km(mars), 3389.5)
+
+  # Cell area follows the radius given, so the grid round-trips
+  original <- hex_grid(area_km2 = 100000, radius_km = "mars")
+  expect_equal(mars$area, original@area_km2, tolerance = 1e-8)
+  expect_gt(earth$area, mars$area)
 })

@@ -2,14 +2,21 @@
 % Please edit documentation in R/hexify_conversions.R
 \name{hexify_lonlat_to_plane}
 \alias{hexify_lonlat_to_plane}
-\title{Convert longitude/latitude to PLANE coordinates}
+\title{Convert Longitude/Latitude to PLANE Coordinates}
 \usage{
-hexify_lonlat_to_plane(lon, lat)
+hexify_lonlat_to_plane(
+  lon,
+  lat,
+  polyhedron = c("icosahedron", "octahedron", "tetrahedron")
+)
 }
 \arguments{
 \item{lon}{Longitude in degrees (-180 to 180)}
 
 \item{lat}{Latitude in degrees (-90 to 90)}
+
+\item{polyhedron}{The solid whose faces are unfolded: "icosahedron"
+(default), "octahedron" or "tetrahedron", in its standard orientation}
 }
 \value{
 Data frame with columns:
@@ -18,11 +25,11 @@ Data frame with columns:
 }
 \description{
 Converts geographic coordinates directly to PLANE coordinates
-(unfolded icosahedron). Combines forward 'Snyder' projection with
+(the unfolded solid). Combines forward 'Snyder' projection with
 the PLANE transformation.
 }
 \details{
-Equivalent to 'dggridR' dgGEO_to_PLANE().
+Equivalent to 'dggridR' dgGEO_to_PLANE() on the icosahedron.
 }
 \examples{
 # Plot world cities in PLANE coordinates
@@ -38,7 +45,6 @@ plot(plane$plane_x, plane$plane_y)
 \code{\link{hexify_icosa_tri_to_plane}} for triangle conversion
 
 Other coordinate conversion:
-\code{\link[=hexify_cell_id_to_quad_ij]{hexify_cell_id_to_quad_ij()}},
 \code{\link[=hexify_cell_to_icosa_tri]{hexify_cell_to_icosa_tri()}},
 \code{\link[=hexify_cell_to_lonlat]{hexify_cell_to_lonlat()}},
 \code{\link[=hexify_cell_to_plane]{hexify_cell_to_plane()}},
