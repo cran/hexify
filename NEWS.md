@@ -1,3 +1,24 @@
+# hexify 0.9.1
+
+* `cell_metrics()` and `wall_metrics()` no longer run for minutes on fine
+  grids or on Apple silicon. Each wall is halved until two estimates of its
+  length and of the area beside it agree; the area's rounding floor shrank
+  with the piece, so pieces shorter than about 1e-7 radians were halved down
+  to 2^20 parts. That covered every cell from about resolution 18 (46 s for
+  three resolution-20 cells), and on arm64, where a wall ending on a face edge
+  can round onto the next face, a zero-length piece in aperture-3 grids
+  (the `?cell_metrics` example ran past CRAN's 30-minute limit). The floor is
+  now absolute, and a wall ending on a face edge ends there. Perimeters and
+  wall lengths change by at most 2e-13 relative, midpoint ratios by at most
+  2e-8 relative (aperture 3 and IVEA; apertures 4 and 7 are unchanged).
+* The last step of `projection_stages()` equals the forward projection bit for
+  bit also where the compiler fuses multiply-adds (arm64, x86-64 with FMA):
+  both now take Snyder's point from one compiled function, where before each
+  inlined copy could round its last digit differently. Projected coordinates
+  and cell IDs are unchanged where the compiler does not fuse.
+* The H3 polygon fill reads its optional holes explicitly, so the package
+  compiles with toolchains where the implicit conversion is ambiguous.
+
 # hexify 0.9.0
 
 ## Printing and documentation
